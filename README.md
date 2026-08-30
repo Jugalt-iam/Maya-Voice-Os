@@ -1,7 +1,11 @@
 # Maya-Voice-Os
 
 A free, standalone, plug-and-play voice AI pipeline. Runs on a laptop, no
-GPU required, no dependency on any paid service or any other project.
+GPU required — the AI processing itself costs $0 using free-tier providers.
+Note: fast-path playbook replies work fully offline once installed, but LLM
+fallback and default TTS need an internet connection and a free API key
+(Groq/OpenRouter) — see "Known limitations" below for exactly what's
+offline vs. what isn't.
 
 **Created by [Jugal Thakkar](./CREDITS.md).** Attribution is required to use
 this project — see [LICENSE](./LICENSE) before you deploy or fork it.
@@ -262,7 +266,6 @@ Maya-Voice-Os/
 Note: `telephony_service/sip_reference/` (the non-functional SIP sample) lives
 in the GitHub source tree but isn't bundled into the pip package — it was
 never meant to run, only to read.
-```
 
 ## Attribution (required)
 
@@ -305,20 +308,12 @@ Run the CLI benchmark helper directly:
 maya-eval --suite latency --calls 30 --concurrency 3
 ```
 
-Example output:
-```text
-Latency benchmark suite
-calls=30 concurrency=3 threshold_ms=2500.0
-P50 first-response latency: 2550.00 ms
-P95 first-response latency: 3102.00 ms
-P99 first-response latency: 3114.00 ms
-Stage breakdown (best effort, local CPU smoke benchmark):
-  asr_ms: 1153.75 ms
-  llm_ms: 317.50 ms
-  tts_ms: 796.25 ms
-Max concurrency before threshold (2500 ms): 4
-Pass rate on fixed test set: 100.0%
-```
+This makes real calls to your configured LLM provider and real TTS calls,
+with genuine concurrency — output varies run to run and depends entirely on
+your hardware, network, and which provider answers. No example numbers are
+shown here on purpose: a single "example output" gets copy-pasted and
+mistaken for a guaranteed benchmark, which defeats the point of measuring
+your own actual setup. Run it yourself and use your own numbers.
 
 For a **text-only round trip** (isolates LLM + TTS, skips ASR):
 ```bash
@@ -341,21 +336,6 @@ now returns it directly:
   "total": {"duration_ms": 1330.8}
 }
 ```
-
-### Tested on 32 GB RAM laptop, no GPU
-
-The current local benchmark is pinned as a real-world baseline for the repo as
-run on a 32 GB RAM laptop without a discrete GPU:
-
-- P50 / P95 / P99 first-response latency: 2550 ms / 3102 ms / 3114 ms
-- ASR / LLM / TTS stage breakdown: 1153.75 ms / 317.50 ms / 796.25 ms
-- Max concurrency before crossing the 2.5 s threshold: 4 concurrent calls
-- Fixed-test pass rate: 100.0%
-
-These are the numbers to use as a reference point when you tune CPU,
-provider, or model settings. The app is still designed to run fully local
-with no GPU requirement, but absolute latency will vary by CPU speed, model
-cache state, and whether cloud LLM/TTS endpoints are being used.
 
 ## Known limitations
 - Real-time streaming (`/process/stream`) bypasses `homemath`'s task
