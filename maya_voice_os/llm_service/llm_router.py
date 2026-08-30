@@ -217,6 +217,7 @@ class LLMRouter:
             self._record_route_trace([], None, "no_provider_configured")
             return "I'm having trouble reaching my language model right now, but I'm still here — could you rephrase that?"
 
+        max_tokens = int(os.getenv("LLM_MAX_TOKENS", "120"))
         attempts: list[dict[str, Any]] = []
         for provider in self.providers:
             breaker_state = self._circuit_breaker.setdefault(provider.name, {"failures": 0, "last_failure_time": 0.0})
@@ -234,11 +235,14 @@ class LLMRouter:
 
             url = f"{provider.host.rstrip('/')}/v1/chat/completions"
             headers = {"Authorization": f"Bearer {provider.api_key}"} if provider.api_key else {}
+            payload = {"model": provider.model, "messages": messages}
+            if max_tokens > 0:
+                payload["max_tokens"] = max_tokens
             start = time.time()
             try:
                 result = homemath.ollama_chat_stream_dual(
                     url,
-                    {"model": provider.model, "messages": messages},
+                    payload,
                     timeout=int(self.timeout),
                     headers=headers,
                 )

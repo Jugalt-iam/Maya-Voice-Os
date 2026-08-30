@@ -1,11 +1,14 @@
-"""In-memory session tracking for call flows."""
+"""In-memory session tracking for call flows with TTL eviction."""
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+
+DEFAULT_TTL_SECONDS = float(os.getenv("SESSION_TTL_SECONDS", "3600"))
 
 
 @dataclass
@@ -44,9 +47,38 @@ class SessionState:
 
 
 class SessionManager:
-    def __init__(self) -> None:
+    def __init__(self, ttl_seconds: Optional[float] = None) -> None:
         self._sessions: Dict[str, SessionState] = {}
         self._lock = asyncio.Lock()
+        self.ttl_seconds = DEFAULT_TTL_SECONDS if ttl_seconds is None else float(ttl_seconds)
+
+    def _is_expired(self, state: SessionState, now: float) -> bool:
+        if self.ttl_seconds <= 0:
+            return False
+        return (now - state.last_activity) > self.ttl_seconds
+
+    def _prune_locked(self) -> None:
+        if self.ttl_seconds <= 0:
+            return
+        now = time.time()
+        expired_ids = [
+            session_id
+            for session_id, state in self._sessions.items()
+            if self._is_expired(state, now)
+        ]
+        for session_id in expired_ids:
+            self._sessions.pop(session_id, None)
+
+    async def prune_expired(self, *, now: Optional[float] = None) -> None:
+        now = time.time() if now is None else now
+        async with self._lock:
+            expired_ids = [
+                session_id
+                for session_id, state in self._sessions.items()
+                if self._is_expired(state, now)
+            ]
+            for session_id in expired_ids:
+                self._sessions.pop(session_id, None)
 
     async def create_session(
         self,
@@ -56,6 +88,7 @@ class SessionManager:
         call_id: Optional[str] = None,
     ) -> SessionState:
         async with self._lock:
+            self._prune_locked()
             session_id = call_id or str(uuid.uuid4())
             conversation_id = str(uuid.uuid4())
             state = SessionState(
@@ -69,14 +102,24 @@ class SessionManager:
 
     async def get(self, session_id: str) -> Optional[SessionState]:
         async with self._lock:
-            return self._sessions.get(session_id)
+            self._prune_locked()
+            state = self._sessions.get(session_id)
+            if state is None:
+                return None
+            if self._is_expired(state, time.time()):
+                self._sessions.pop(session_id, None)
+                return None
+            return state
 
     async def upsert(self, state: SessionState) -> None:
         async with self._lock:
+            self._prune_locked()
+            state.last_activity = time.time()
             self._sessions[state.session_id] = state
 
     async def list_sessions(self) -> List[SessionState]:  # pragma: no cover - admin helper
         async with self._lock:
+            self._prune_locked()
             return list(self._sessions.values())
 
 

@@ -61,6 +61,9 @@ router = APIRouter(prefix="/twilio", tags=["twilio"])
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN") or None
 PUBLIC_BASE_URL = os.getenv("TELEPHONY_PUBLIC_BASE_URL", "http://localhost:8100")
 BARGE_IN_DEMO_MODE = os.getenv("BARGE_IN_DEMO_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
+BARGE_IN_RMS_THRESHOLD = float(os.getenv("BARGE_IN_RMS_THRESHOLD", "0.03"))
+BARGE_IN_FRAMES_TO_CANCEL = int(os.getenv("BARGE_IN_FRAMES_TO_CANCEL", "2"))
+PLAYBACK_FRAME_SAMPLES = 160
 
 TELEPHONY_SR = 8000
 ASR_SR = 16000
@@ -234,23 +237,54 @@ async def _play_text_response(websocket: WebSocket, stream_sid: str, text: str) 
     try:
         tts = get_tts_provider()
         audio = await tts.synthesize_pcm16(text, voice=os.getenv("TTS_VOICE", "en-US-JennyNeural"), sample_rate=ASR_SR)
-        await _send_audio(websocket, stream_sid, audio)
+        await _send_audio_cancelable(websocket, stream_sid, audio, asyncio.Event(), {"playing": False})
     except Exception:
         logger.exception("Failed to synthesize canned confirmation response.")
 
 
-async def _send_audio(websocket: WebSocket, stream_sid: str, audio_16k: np.ndarray) -> None:
+async def _send_audio_cancelable(
+    websocket: WebSocket,
+    stream_sid: str,
+    audio_16k: np.ndarray,
+    cancel_event: asyncio.Event,
+    playback_state: dict,
+) -> None:
+    if audio_16k is None or audio_16k.size == 0:
+        return
+
     if BARGE_IN_DEMO_MODE:
         audio_16k = _apply_demo_gaps(audio_16k)
 
+    cancel_event.clear()
+    playback_state["playing"] = True
     audio_8k = resample_audio(audio_16k, ASR_SR, TELEPHONY_SR)
-    mulaw_bytes = float32_to_mulaw_bytes(audio_8k)
-    payload_b64 = base64.b64encode(mulaw_bytes).decode("ascii")
-    await websocket.send_text(json.dumps({
-        "event": "media",
-        "streamSid": stream_sid,
-        "media": {"payload": payload_b64},
-    }))
+
+    try:
+        for start in range(0, len(audio_8k), PLAYBACK_FRAME_SAMPLES):
+            if cancel_event.is_set():
+                logger.info("Playback cancelled; stopping audio send.")
+                break
+
+            frame = audio_8k[start:start + PLAYBACK_FRAME_SAMPLES]
+            if frame.size == 0:
+                break
+
+            mulaw_bytes = float32_to_mulaw_bytes(frame)
+            payload_b64 = base64.b64encode(mulaw_bytes).decode("ascii")
+            await websocket.send_text(json.dumps({
+                "event": "media",
+                "streamSid": stream_sid,
+                "media": {"payload": payload_b64},
+            }))
+
+            if (start // PLAYBACK_FRAME_SAMPLES) % 25 == 0:
+                await asyncio.sleep(0)
+    finally:
+        playback_state["playing"] = False
+
+
+async def _send_audio(websocket: WebSocket, stream_sid: str, audio_16k: np.ndarray) -> None:
+    await _send_audio_cancelable(websocket, stream_sid, audio_16k, asyncio.Event(), {"playing": False})
 
 
 async def _fire_crm_action_webhook(conversation_id: str, transcript: str, action: str) -> None:
@@ -311,6 +345,9 @@ async def twilio_media_stream(websocket: WebSocket):
     silence_run = 0
     session_state = None
     response_started_at: Optional[float] = None
+    playback_state = {"playing": False}
+    cancel_playback = asyncio.Event()
+    barge_in_run = 0
 
     try:
         while True:
@@ -334,19 +371,45 @@ async def twilio_media_stream(websocket: WebSocket):
                 silence_after_tone_frames = 0
                 is_voicemail = False
                 logger.info(f"Twilio call started: {stream_sid}")
+                playback_state["playing"] = False
+                cancel_playback.clear()
+                barge_in_run = 0
 
                 greeting = await client.get_greeting_audio()
                 if greeting and greeting.get("audio_base64"):
                     greeting_pcm16 = np.frombuffer(
                         base64.b64decode(greeting["audio_base64"]), dtype=np.int16
                     ).astype(np.float32) / 32768.0
-                    await _send_audio(websocket, stream_sid, greeting_pcm16)
+                    await _send_audio_cancelable(
+                        websocket,
+                        stream_sid,
+                        greeting_pcm16,
+                        cancel_playback,
+                        playback_state,
+                    )
                 else:
                     logger.warning("Could not fetch greeting audio from orchestration-service; call proceeds silently until caller speaks.")
 
             elif event == "media":
                 mulaw_bytes = base64.b64decode(msg["media"]["payload"])
                 chunk = mulaw_bytes_to_float32(mulaw_bytes, sample_rate=TELEPHONY_SR)
+                rms = float(np.sqrt(np.mean(chunk ** 2))) if chunk.size else 0.0
+
+                if playback_state["playing"]:
+                    if rms > BARGE_IN_RMS_THRESHOLD:
+                        barge_in_run += 1
+                        if barge_in_run >= BARGE_IN_FRAMES_TO_CANCEL and not cancel_playback.is_set():
+                            cancel_playback.set()
+                            playback_state["playing"] = False
+                            barge_in_run = 0
+                            buffer = []
+                            silence_run = 0
+                            await websocket.send_text(json.dumps({"event": "clear", "streamSid": stream_sid}))
+                            logger.info("Barge-in detected; cleared Twilio playback buffer.")
+                    else:
+                        barge_in_run = 0
+                    continue
+
                 buffer.append(chunk)
 
                 if not is_voicemail and time.monotonic() - call_started_at <= VOICEMAIL_CHECK_SECONDS:
@@ -490,7 +553,8 @@ async def twilio_media_stream(websocket: WebSocket):
 
                         if audio_b64 and reply_text:
                             reply_pcm16 = np.frombuffer(base64.b64decode(audio_b64), dtype=np.int16).astype(np.float32) / 32768.0
-                            await _send_audio(websocket, stream_sid, reply_pcm16)
+                            cancel_playback.clear()
+                            await _send_audio_cancelable(websocket, stream_sid, reply_pcm16, cancel_playback, playback_state)
 
             elif event == "stop":
                 logger.info(f"Twilio call ended: {stream_sid}")
