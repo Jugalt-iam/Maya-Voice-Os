@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "maya-voice-os"
-version = "1.0.2"
+version = "1.0.3"
 description = "Free, local, plug-and-play voice AI pipeline — ASR, multi-provider free LLM routing, TTS. No GPU, no subscription."
 readme = "README.md"
 license = { file = "LICENSE" }
