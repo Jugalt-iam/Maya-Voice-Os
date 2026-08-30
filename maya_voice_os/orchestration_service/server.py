@@ -63,6 +63,55 @@ app.add_middleware(
 pipeline: Optional[VoicePipeline] = None
 _conversations: Dict[str, ConversationState] = {}
 _lock = asyncio.Lock()
+_debug_latency_history: list[dict[str, Any]] = []
+_debug_queue_depth = 0
+
+
+def _debug_snapshot() -> Dict[str, Any]:
+    sessions: list[dict[str, Any]] = []
+    for conversation_id, state in _conversations.items():
+        sessions.append({
+            "conversation_id": conversation_id,
+            "status": getattr(state, "status", "initialised"),
+            "awaiting_confirmation": getattr(state, "awaiting_confirmation", False),
+            "confirmation_retries": getattr(state, "confirmation_retries", 0),
+            "exchange_count": len(getattr(state, "exchanges", [])),
+            "last_activity": getattr(state, "last_activity", 0.0),
+        })
+
+    circuit_breakers: dict[str, dict[str, Any]] = {}
+    route_history: list[dict[str, Any]] = []
+    if pipeline is not None:
+        for provider_name, breaker in getattr(pipeline.llm_router, "_circuit_breaker", {}).items():
+            circuit_breakers[provider_name] = {
+                "failures": breaker.get("failures", 0),
+                "last_failure_time": breaker.get("last_failure_time", 0.0),
+                "state": "open" if breaker.get("failures", 0) >= 3 else "closed",
+                "last_error": breaker.get("last_error"),
+            }
+        route_history = list(getattr(pipeline.llm_router, "route_history", [])[-10:])
+    fallback_count_last_10 = sum(1 for item in route_history if int(item.get("fallback_count", 0)) > 0)
+
+    queue_depth = int(_debug_queue_depth)
+    if queue_depth >= 10:
+        backpressure = "high"
+    elif queue_depth >= 4:
+        backpressure = "moderate"
+    else:
+        backpressure = "normal"
+
+    return {
+        "active_sessions": len(sessions),
+        "sessions": sessions,
+        "latency_history": _debug_latency_history[-10:],
+        "llm_circuit_breakers": circuit_breakers,
+        "llm_route_history": route_history,
+        "last_route_trace": route_history[-1] if route_history else None,
+        "fallback_count_last_10": fallback_count_last_10,
+        "queue_depth": queue_depth,
+        "backpressure": backpressure,
+        "updated_at": time.time(),
+    }
 
 
 @app.on_event("startup")
@@ -197,6 +246,11 @@ async def health() -> Dict[str, str]:
     return {"status": "ok", "identity": pipeline.identity.name}
 
 
+@app.get("/debug")
+async def debug() -> Dict[str, Any]:
+    return _debug_snapshot()
+
+
 @app.post("/process", response_model=ProcessResponse, dependencies=[])
 async def process(request: ProcessRequest, authorization: Optional[str] = Header(default=None)) -> ProcessResponse:
     _require_token(authorization)
@@ -206,6 +260,8 @@ async def process(request: ProcessRequest, authorization: Optional[str] = Header
 
     start = time.time()
     state = await _get_state(request.conversation_id)
+    global _debug_queue_depth
+    _debug_queue_depth += 1
 
     if request.text_input:
         t0 = time.time()
@@ -217,6 +273,14 @@ async def process(request: ProcessRequest, authorization: Optional[str] = Header
         stage_tts_ms = (time.time() - t0) * 1000
 
         audio_b64 = base64.b64encode(float32_to_pcm16_bytes(reply_audio)).decode("ascii")
+        _debug_latency_history.append({
+            "conversation_id": request.conversation_id,
+            "overall_ms": round((time.time() - start) * 1000, 2),
+            "asr_ms": 0.0,
+            "llm_ms": round(stage_process_ms, 2),
+            "tts_ms": round(stage_tts_ms, 2),
+        })
+        _debug_queue_depth = max(0, _debug_queue_depth - 1)
         return ProcessResponse(
             conversation_id=request.conversation_id,
             transcript=request.text_input,
@@ -244,6 +308,14 @@ async def process(request: ProcessRequest, authorization: Optional[str] = Header
     total_ms = (time.time() - t0) * 1000
 
     audio_b64 = base64.b64encode(float32_to_pcm16_bytes(reply_audio)).decode("ascii")
+    _debug_latency_history.append({
+        "conversation_id": request.conversation_id,
+        "overall_ms": round((time.time() - start) * 1000, 2),
+        "asr_ms": round(stage_timings.get("asr_ms", 0.0), 2),
+        "llm_ms": round(stage_timings.get("respond_ms", 0.0), 2),
+        "tts_ms": round(stage_timings.get("tts_ms", 0.0), 2),
+    })
+    _debug_queue_depth = max(0, _debug_queue_depth - 1)
 
     return ProcessResponse(
         conversation_id=request.conversation_id,

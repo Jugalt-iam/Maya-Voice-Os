@@ -8,6 +8,7 @@ transcription (English + Hindi + other Indic languages Whisper covers).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -54,10 +55,12 @@ HALLUCINATION_PATTERNS = [
 ]
 
 
-def filter_hallucination(text: str) -> Tuple[str, bool]:
+def filter_hallucination(text: str, safe_mode: bool = False) -> Tuple[str, bool]:
     """
     Filter out common Whisper hallucinations.
     Returns (filtered_text, was_hallucination).
+    In safe mode, we apply the stricter checks more aggressively to avoid
+    weird public-demo outputs.
     """
     if not text:
         return "", True
@@ -81,6 +84,9 @@ def filter_hallucination(text: str) -> Tuple[str, bool]:
         if repetition_ratio > 2.5:
             return "", True
 
+    if safe_mode and len(words) <= 3 and len(text) < 25:
+        return "", True
+
     return text, False
 
 
@@ -101,6 +107,7 @@ class ASREngine:
         language: Optional[str] = None,
         beam_size: Optional[int] = None,
         cpu_threads: Optional[int] = None,
+        safe_mode: Optional[bool] = None,
     ):
         self.model_size = model_size or os.getenv("ASR_MODEL_SIZE", "small")
         self.device = device or os.getenv("ASR_DEVICE", "cpu")
@@ -118,6 +125,8 @@ class ASREngine:
         # Set explicitly if you want to reserve cores for other processes.
         cpu_threads_env = os.getenv("ASR_CPU_THREADS")
         self.cpu_threads = cpu_threads if cpu_threads is not None else (int(cpu_threads_env) if cpu_threads_env else 0)
+        self.safe_mode = safe_mode if safe_mode is not None else os.getenv("SAFE_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
+        self.transcription_lock = asyncio.Lock()
 
         logger.info(
             f"Loading faster-whisper '{self.model_size}' "
@@ -153,7 +162,7 @@ class ASREngine:
         )
         text = " ".join(seg.text.strip() for seg in segments).strip()
 
-        filtered_text, was_hallucination = filter_hallucination(text)
+        filtered_text, was_hallucination = filter_hallucination(text, safe_mode=self.safe_mode)
         if was_hallucination and text:
             logger.info(f"Filtered likely hallucination: {text[:60]!r}")
 

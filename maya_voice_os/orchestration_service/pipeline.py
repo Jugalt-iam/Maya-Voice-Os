@@ -27,12 +27,17 @@ already self-contained and only needs an HTTP wrapper added.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
+import os
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+import httpx
 import numpy as np
 
 from maya_voice_os.shared.redis_client import get_redis_client
@@ -63,6 +68,25 @@ class ConversationState:
         self.history.append({"role": role, "content": content})
         if len(self.history) > 20:
             self.history = self.history[-20:]
+
+
+class VoiceCommandRouter:
+    def __init__(self):
+        self.patterns = {
+            "confirm": re.compile(r"\b(yes|yeah|yep|sure|absolutely|confirm|go ahead|ok|okay|correct)\b", re.IGNORECASE),
+            "deny": re.compile(r"\b(no|nah|nope|not interested|cancel|stop|don't)\b", re.IGNORECASE),
+            "elaborate": re.compile(r"\b(tell me more|explain|describe|what do you mean|details|brief)\b", re.IGNORECASE),
+            "escalate": re.compile(r"\b(human|agent|person|representative|manager|transfer)\b", re.IGNORECASE),
+        }
+
+    def classify_command(self, transcript: str) -> str:
+        text = (transcript or "").strip()
+        if not text:
+            return "unclear"
+        for category, pattern in self.patterns.items():
+            if pattern.search(text):
+                return category
+        return "unclear"
 
 
 class VoicePipeline:
@@ -108,7 +132,8 @@ class VoicePipeline:
         to diagnose "why is this slow" instead of guessing from logs.
         """
         t0 = time.perf_counter()
-        transcript = self.asr.transcribe(audio, sample_rate=sample_rate)
+        async with self.asr.transcription_lock:
+            transcript = await asyncio.to_thread(self.asr.transcribe, audio, sample_rate=sample_rate)
         asr_ms = (time.perf_counter() - t0) * 1000
         user_text = transcript.text
         logger.info(f"Heard ({transcript.language}): {user_text!r}")
@@ -123,6 +148,85 @@ class VoicePipeline:
 
         timings = {"asr_ms": round(asr_ms, 1), "respond_ms": round(respond_ms, 1), "tts_ms": round(tts_ms, 1)}
         return reply_text, user_text, reply_audio, timings
+
+    def _extract_potential_entities(self, transcript: str) -> dict:
+        entities: dict = {}
+        phone = re.search(r"\+?\d[\d\s().-]{7,}\d", transcript)
+        if phone:
+            entities["phone_number"] = phone.group(0).strip()
+
+        email = re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", transcript)
+        if email:
+            entities["email"] = email.group(0).strip()
+
+        # Small, generic extraction for common CRM lookup values.
+        if "".join(re.findall(r"\b[A-Z][a-z]+\b", transcript)):
+            entities["names"] = re.findall(r"\b[A-Z][a-z]+\b", transcript)[:5]
+
+        return entities
+
+    async def _fire_crm_webhook(self, conversation_id: str, user_transcript: str, llm_response: str) -> None:
+        crm_webhook_url = os.getenv("CRM_WEBHOOK_URL")
+        if not crm_webhook_url:
+            return
+
+        async def _post_background() -> None:
+            try:
+                payload = {
+                    "conversation_id": conversation_id,
+                    "user_transcript": user_transcript,
+                    "llm_response": llm_response,
+                    "entities": self._extract_potential_entities(user_transcript),
+                }
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    await client.post(crm_webhook_url, json=payload)
+            except Exception:
+                logger.exception("CRM webhook submission failed in background task.")
+
+        asyncio.create_task(_post_background())
+
+    async def generate_call_summary(self, state: ConversationState) -> dict:
+        """Generate a compact JSON summary for the conversation and optionally send it to CRM."""
+        if not state.history:
+            return {}
+
+        history_text = "\n".join(f"{entry.get('role', 'unknown')}: {entry.get('content', '')}" for entry in state.history)
+        system_prompt = (
+            "Extract structured data from this conversation. Return ONLY valid JSON with keys: "
+            "name, phone, email, budget, timeline, property_interest, next_action, sentiment. "
+            "If a field is not mentioned, use null."
+        )
+        try:
+            response = self.llm_router.chat(
+                [{"role": "user", "content": f"Conversation history:\n{history_text}"}],
+                system_prompt=system_prompt,
+            )
+            summary = json.loads(response)
+            if not isinstance(summary, dict):
+                return {}
+            return summary
+        except (TypeError, ValueError, json.JSONDecodeError):
+            logger.warning("Call summary JSON parse failed; returning empty summary.")
+            return {}
+        finally:
+            crm_webhook_url = os.getenv("CRM_WEBHOOK_URL")
+            if not crm_webhook_url:
+                return
+            if "response" not in locals():
+                return
+            async def _post_summary_background() -> None:
+                try:
+                    payload = {
+                        "conversation_id": state.conversation_id,
+                        "call_summary": summary if "summary" in locals() else {},
+                    }
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        response = await client.post(crm_webhook_url, json=payload)
+                        logger.info("CRM summary webhook sent: %s %s", response.status_code, response.text[:200])
+                except Exception:
+                    logger.exception("CRM summary webhook failed in background task.")
+
+            asyncio.create_task(_post_summary_background())
 
     async def respond(self, user_text: str, state: ConversationState) -> str:
         if not user_text.strip():
@@ -153,6 +257,7 @@ class VoicePipeline:
             self._record_route(state.conversation_id, "response_selector")
             await self._record_turn(user_text, reply, state, understanding=understanding)
             state.add("assistant", reply)
+            await self._fire_crm_webhook(state.conversation_id, user_text, reply)
             return reply
 
         # 3. LLM fallback (homemath-routed free providers), unchanged.
@@ -161,6 +266,7 @@ class VoicePipeline:
         self._record_route(state.conversation_id, f"llm:{provider}")
         await self._record_turn(user_text, reply, state, understanding=understanding)
         state.add("assistant", reply)
+        await self._fire_crm_webhook(state.conversation_id, user_text, reply)
         return reply
 
     def _record_route(self, conversation_id: str, route: str) -> None:

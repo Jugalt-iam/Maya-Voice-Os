@@ -21,8 +21,9 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Any, List, Optional
 
 logger = logging.getLogger("llm_router")
 
@@ -125,12 +126,60 @@ class LLMRouter:
     def __init__(self):
         self.providers = _build_provider_configs()
         self.timeout = float(os.getenv("LLM_TIMEOUT", "25"))
+        self._circuit_breaker: dict[str, dict] = {}
         # Set by chat() to whichever provider actually answered the most
         # recent call (or None if every provider failed). Used for feedback
         # attribution (continual_learning) and stats (route tracking) —
         # read this right after calling chat(), not concurrently from
         # another call, since it's plain instance state, not per-call.
         self.last_provider_used: Optional[str] = None
+        self.last_route_trace: Optional[dict[str, Any]] = None
+        self.route_history: list[dict[str, Any]] = []
+        self.safe_mode = os.getenv("SAFE_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
+
+    def _record_route_trace(self, attempts: list[dict[str, Any]], selected_provider: Optional[str], fallback_reason: str) -> None:
+        primary_provider = attempts[0]["provider"] if attempts else None
+        trace = {
+            "primary_provider": primary_provider,
+            "selected_provider": selected_provider,
+            "success": selected_provider is not None,
+            "fallback_count": max(0, len(attempts) - 1),
+            "reason": fallback_reason,
+            "attempts": attempts,
+        }
+        self.last_route_trace = trace
+        self.route_history.append(trace)
+        if len(self.route_history) > 50:
+            self.route_history = self.route_history[-50:]
+
+        if not attempts:
+            logger.info("LLM routing: no providers available")
+            return
+
+        first_attempt = attempts[0]
+        if selected_provider and selected_provider != primary_provider:
+            logger.info(
+                "LLM routing: tried %s → %s (%0.1fs), fallback to %s → success (%0.1fs)",
+                first_attempt["provider"],
+                first_attempt["reason"],
+                first_attempt["elapsed_ms"] / 1000.0,
+                selected_provider,
+                attempts[-1]["elapsed_ms"] / 1000.0,
+            )
+        elif selected_provider == primary_provider:
+            logger.info(
+                "LLM routing: tried %s → success (%0.1fs)",
+                primary_provider,
+                attempts[-1]["elapsed_ms"] / 1000.0,
+            )
+        else:
+            final_attempt = attempts[-1]
+            logger.warning(
+                "LLM routing: tried %s → %s (%0.1fs), all providers failed",
+                primary_provider,
+                final_attempt["reason"],
+                final_attempt["elapsed_ms"] / 1000.0,
+            )
 
     def chat(self, messages: list[dict], system_prompt: Optional[str] = None) -> str:
         """
@@ -157,14 +206,35 @@ class LLMRouter:
         import homemath
 
         self.last_provider_used = None
+        if self.safe_mode:
+            logger.info("SAFE MODE: using conservative-only LLM handling.")
+            if system_prompt:
+                messages = [{"role": "system", "content": system_prompt}, *messages]
+            return "I’m not sure, so I’d rather be cautious. Could you rephrase it more simply?"
         if system_prompt:
             messages = [{"role": "system", "content": system_prompt}, *messages]
         if not self.providers:
+            self._record_route_trace([], None, "no_provider_configured")
             return "I'm having trouble reaching my language model right now, but I'm still here — could you rephrase that?"
 
+        attempts: list[dict[str, Any]] = []
         for provider in self.providers:
+            breaker_state = self._circuit_breaker.setdefault(provider.name, {"failures": 0, "last_failure_time": 0.0})
+            failures = breaker_state.get("failures", 0)
+            last_failure_time = breaker_state.get("last_failure_time", 0.0)
+            if failures >= 3 and time.time() - last_failure_time < 300:
+                attempts.append({
+                    "provider": provider.name,
+                    "status": "skipped",
+                    "reason": "circuit_open",
+                    "elapsed_ms": 0.0,
+                })
+                logger.warning(f"Circuit breaker open for {provider.name}, skipping")
+                continue
+
             url = f"{provider.host.rstrip('/')}/v1/chat/completions"
             headers = {"Authorization": f"Bearer {provider.api_key}"} if provider.api_key else {}
+            start = time.time()
             try:
                 result = homemath.ollama_chat_stream_dual(
                     url,
@@ -173,6 +243,7 @@ class LLMRouter:
                     headers=headers,
                 )
                 answer = (result.get("content") or "").strip()
+                elapsed_ms = (time.time() - start) * 1000
                 if answer:
                     if result.get("source") == "choices[0].delta.reasoning_content":
                         logger.warning(
@@ -180,12 +251,44 @@ class LLMRouter:
                             "answer — using it anyway since it's better than silence."
                         )
                     logger.info(f"LLM answer served by provider '{provider.name}' (source={result.get('source')}).")
+                    attempts.append({
+                        "provider": provider.name,
+                        "status": "success",
+                        "reason": "success",
+                        "elapsed_ms": round(elapsed_ms, 2),
+                    })
+                    self._circuit_breaker[provider.name] = {"failures": 0, "last_failure_time": 0.0}
                     self.last_provider_used = provider.name
+                    self._record_route_trace(attempts, provider.name, "success")
                     return answer
                 logger.warning(f"Provider '{provider.name}' returned an empty answer, trying next.")
+                attempts.append({
+                    "provider": provider.name,
+                    "status": "failed",
+                    "reason": "empty_response",
+                    "elapsed_ms": round(elapsed_ms, 2),
+                })
+                self._circuit_breaker[provider.name] = {
+                    "failures": breaker_state.get("failures", 0) + 1,
+                    "last_failure_time": time.time(),
+                }
             except Exception as e:
+                elapsed_ms = (time.time() - start) * 1000
+                reason = "timeout" if "timed out" in str(e).lower() or "timeout" in str(e).lower() else "error"
+                attempts.append({
+                    "provider": provider.name,
+                    "status": "failed",
+                    "reason": reason,
+                    "elapsed_ms": round(elapsed_ms, 2),
+                    "error": str(e),
+                })
                 logger.warning(f"Provider '{provider.name}' failed ({e}), trying next.")
+                self._circuit_breaker[provider.name] = {
+                    "failures": breaker_state.get("failures", 0) + 1,
+                    "last_failure_time": time.time(),
+                }
                 continue
 
+        self._record_route_trace(attempts, None, "all_providers_failed")
         logger.error("All configured LLM providers failed.")
         return "I'm having a bit of trouble thinking right now — can you say that again?"

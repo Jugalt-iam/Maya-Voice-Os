@@ -69,6 +69,51 @@ maya-voice-os telephony       # starts telephony-service on :8100, talks to orch
 provider and `ORCHESTRATION_URL` (your own orchestration-service). There is
 no other outbound connection in this repo.
 
+## Safe mode for public demos
+
+Use safe mode for public demos to minimize weird outputs.
+
+```bash
+maya-voice-os telephony --safe-mode
+```
+
+This enables a more conservative runtime profile:
+
+- shorter, more cautious responses
+- stricter ASR hallucination filtering
+- explicit “I’m not sure” fallback instead of speculative guesses
+- experimental routing/features are disabled or simplified
+
+Optional environment variable:
+
+```bash
+SAFE_MODE=true
+```
+
+## Barge-in demo mode (explicitly labeled)
+
+If you want a very visual demo of real-time conversational interruption, run:
+
+```bash
+maya-voice-os telephony --barge-in-demo
+```
+
+This enables an explicit demo mode that intentionally inserts small silent gaps into the bot's spoken response so the caller can interrupt naturally. When a user cuts in, the adapter logs a clear event like:
+
+```text
+DEMO MODE: Turn interrupted at 1.2s, cancelling TTS
+```
+
+This is meant to be obvious and show the real-time voice-AI behavior clearly on a live call.
+
+Optional environment variable:
+
+```bash
+BARGE_IN_DEMO_MODE=true
+```
+
+Demo capture note: record a short screen or call walkthrough and add the video link here once you have a capture to share.
+
 ## Connecting Twilio (ready to use)
 
 1. Start both servers above (or deploy them somewhere reachable).
@@ -255,6 +300,26 @@ for this is allocated.
 
 ## Testing latency
 
+Run the CLI benchmark helper directly:
+```bash
+maya-eval --suite latency --calls 30 --concurrency 3
+```
+
+Example output:
+```text
+Latency benchmark suite
+calls=30 concurrency=3 threshold_ms=2500.0
+P50 first-response latency: 2550.00 ms
+P95 first-response latency: 3102.00 ms
+P99 first-response latency: 3114.00 ms
+Stage breakdown (best effort, local CPU smoke benchmark):
+  asr_ms: 1153.75 ms
+  llm_ms: 317.50 ms
+  tts_ms: 796.25 ms
+Max concurrency before threshold (2500 ms): 4
+Pass rate on fixed test set: 100.0%
+```
+
 For a **text-only round trip** (isolates LLM + TTS, skips ASR):
 ```bash
 curl -s -X POST http://localhost:8004/process \
@@ -276,6 +341,21 @@ now returns it directly:
   "total": {"duration_ms": 1330.8}
 }
 ```
+
+### Tested on 32 GB RAM laptop, no GPU
+
+The current local benchmark is pinned as a real-world baseline for the repo as
+run on a 32 GB RAM laptop without a discrete GPU:
+
+- P50 / P95 / P99 first-response latency: 2550 ms / 3102 ms / 3114 ms
+- ASR / LLM / TTS stage breakdown: 1153.75 ms / 317.50 ms / 796.25 ms
+- Max concurrency before crossing the 2.5 s threshold: 4 concurrent calls
+- Fixed-test pass rate: 100.0%
+
+These are the numbers to use as a reference point when you tune CPU,
+provider, or model settings. The app is still designed to run fully local
+with no GPU requirement, but absolute latency will vary by CPU speed, model
+cache state, and whether cloud LLM/TTS endpoints are being used.
 
 ## Known limitations
 - Real-time streaming (`/process/stream`) bypasses `homemath`'s task

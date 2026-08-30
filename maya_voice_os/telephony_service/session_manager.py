@@ -27,6 +27,9 @@ class SessionState:
     exchanges: List[Exchange] = field(default_factory=list)
     metadata: Dict[str, str] = field(default_factory=dict)
     status: str = "initialised"
+    current_processing_task: Optional[asyncio.Task] = None
+    awaiting_confirmation: bool = False
+    confirmation_retries: int = 0
 
     def record_exchange(
         self,

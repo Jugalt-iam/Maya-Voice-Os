@@ -31,6 +31,9 @@ dependencies = [
     "httpx>=0.27.0",
     "websockets>=12.0",
     "python-multipart>=0.0.9",
+    "onnxruntime>=1.16.0",
+    "silero-vad>=0.1.0",
+    "webrtcvad>=2.0.10",
     "audioop-lts; python_version >= '3.13'",
 ]
 
@@ -40,6 +43,7 @@ Repository = "https://github.com/Jugalt-iam/Maya-Voice-Os"
 
 [project.scripts]
 maya-voice-os = "maya_voice_os.cli:main"
+maya-eval = "maya_voice_os.cli:main_eval"
 
 [tool.setuptools]
 packages = [
