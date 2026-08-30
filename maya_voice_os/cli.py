@@ -141,51 +141,111 @@ def _run_eval() -> None:
 
 
 def _run_latency_suite(calls: int = 30, concurrency: int = 3, threshold_ms: float = 2500.0) -> None:
+    """
+    Genuinely measures the real pipeline — LLM (llm_router.chat, real network
+    calls to whichever providers are configured) and TTS (real edge-tts
+    calls) — instead of the previous version, which cycled through hardcoded
+    constant arrays and never touched the actual code.
+
+    ASR timing is intentionally NOT included here: including it would mean
+    silently loading and running faster-whisper on synthetic silence, which
+    wouldn't measure anything real either. Use `--suite asr` with real .wav
+    files under eval_audio/ for genuine ASR latency — that suite already
+    calls the real ASREngine on real audio.
+
+    Concurrency is real: `concurrency` calls actually run at once via
+    asyncio.gather, not an algebraic formula estimating what concurrency
+    "should" do.
+    """
+    import asyncio as _asyncio
+
+    from maya_voice_os.llm_service.llm_router import LLMRouter
+    from maya_voice_os.tts_service.engine import get_provider as get_tts_provider
+
     if calls <= 0:
         calls = 1
     if concurrency <= 0:
         concurrency = 1
 
-    asr_samples = [900.0, 960.0, 1040.0, 1120.0, 1180.0, 1260.0, 1350.0, 1420.0]
-    llm_samples = [240.0, 260.0, 290.0, 310.0, 330.0, 350.0, 370.0, 390.0]
-    tts_samples = [620.0, 670.0, 710.0, 760.0, 820.0, 880.0, 930.0, 980.0]
+    tts = get_tts_provider()
+    test_inputs = [FIXED_TEST_SET[i % len(FIXED_TEST_SET)] for i in range(calls)]
 
-    latency_samples = []
-    for index in range(calls):
-        asr_ms = asr_samples[index % len(asr_samples)]
-        llm_ms = llm_samples[index % len(llm_samples)]
-        tts_ms = tts_samples[index % len(tts_samples)]
-        concurrency_penalty = max(0.0, (concurrency - 1) * 150.0)
-        total = asr_ms + llm_ms + tts_ms + concurrency_penalty + (index % 7) * 12.0
-        latency_samples.append(total)
+    async def _one_call(text: str) -> dict[str, object]:
+        # A fresh LLMRouter per call, not one shared instance — LLMRouter() is
+        # cheap to construct (just reads provider config from env, no model
+        # loading), and this avoids a real race condition: last_provider_used
+        # is mutable instance state, and under real concurrency (which this
+        # benchmark specifically exercises), two concurrent calls sharing one
+        # router could each overwrite that field before the other reads it.
+        local_router = LLMRouter()
+        result: dict[str, object] = {"ok": False, "total_ms": None, "llm_ms": None, "tts_ms": None}
+        try:
+            t0 = time.perf_counter()
+            reply = await _asyncio.to_thread(local_router.chat, [{"role": "user", "content": text}])
+            llm_ms = (time.perf_counter() - t0) * 1000.0
 
-    stage_breakdown = {
-        "asr_ms": round(sum(asr_samples) / len(asr_samples), 2),
-        "llm_ms": round(sum(llm_samples) / len(llm_samples), 2),
-        "tts_ms": round(sum(tts_samples) / len(tts_samples), 2),
-    }
+            # chat() never raises — on total provider failure it returns a
+            # graceful fallback string ("I'm having trouble thinking right
+            # now...") by design, so a real call never just goes silent. A
+            # non-empty reply alone does NOT prove a provider actually
+            # answered; last_provider_used is None specifically when every
+            # provider failed, which is the real signal to check.
+            provider_answered = local_router.last_provider_used is not None
+            if not provider_answered:
+                result["error"] = "all providers failed (fallback message returned, not a real answer)"
 
-    max_concurrency = 1
-    for candidate in range(1, max(2, calls + 1)):
-        projected_latency = 1000.0 + 220.0 * candidate + 180.0 * max(0, candidate - 1)
-        if projected_latency <= threshold_ms:
-            max_concurrency = candidate
-        else:
-            break
+            t1 = time.perf_counter()
+            await tts.synthesize_pcm16(reply, voice="en-US-EmmaMultilingualNeural", sample_rate=16000)
+            tts_ms = (time.perf_counter() - t1) * 1000.0
 
-    expected = FIXED_TEST_SET
-    pass_rate = _score_fixed_test_set(expected, expected)
+            result.update(
+                ok=provider_answered,
+                total_ms=llm_ms + tts_ms,
+                llm_ms=llm_ms,
+                tts_ms=tts_ms,
+            )
+        except Exception as exc:  # a failed call is real data too — record it as a failure, don't hide it
+            result["error"] = str(exc)
+        return result
 
-    print("Latency benchmark suite")
+    async def _run_at_concurrency(inputs: list[str], conc: int) -> list[dict[str, object]]:
+        semaphore = _asyncio.Semaphore(conc)
+
+        async def _bounded(text: str) -> dict[str, object]:
+            async with semaphore:
+                return await _one_call(text)
+
+        return await _asyncio.gather(*(_bounded(t) for t in inputs))
+
+    results = _asyncio.run(_run_at_concurrency(test_inputs, concurrency))
+
+    ok_results = [r for r in results if r["ok"]]
+    total_samples = [float(r["total_ms"]) for r in ok_results if r["total_ms"] is not None]
+    llm_samples = [float(r["llm_ms"]) for r in ok_results if r["llm_ms"] is not None]
+    tts_samples = [float(r["tts_ms"]) for r in ok_results if r["tts_ms"] is not None]
+    pass_rate = len(ok_results) / len(results) if results else 0.0
+
+    print("Latency benchmark suite (real LLM + TTS calls, ASR excluded — see --suite asr)")
     print(f"calls={calls} concurrency={concurrency} threshold_ms={threshold_ms}")
-    print(f"P50 first-response latency: {_percentile(latency_samples, 50):.2f} ms")
-    print(f"P95 first-response latency: {_percentile(latency_samples, 95):.2f} ms")
-    print(f"P99 first-response latency: {_percentile(latency_samples, 99):.2f} ms")
-    print("Stage breakdown (best effort, local CPU smoke benchmark):")
-    for key, value in stage_breakdown.items():
-        print(f"  {key}: {value:.2f} ms")
-    print(f"Max concurrency before threshold ({threshold_ms:.0f} ms): {max_concurrency}")
-    print(f"Pass rate on fixed test set: {pass_rate * 100.0:.1f}%")
+    if total_samples:
+        print(f"P50 first-response latency: {_percentile(total_samples, 50):.2f} ms")
+        print(f"P95 first-response latency: {_percentile(total_samples, 95):.2f} ms")
+        print(f"P99 first-response latency: {_percentile(total_samples, 99):.2f} ms")
+        print("Stage breakdown (measured, not estimated):")
+        print(f"  llm_ms: {sum(llm_samples) / len(llm_samples):.2f} ms (avg over {len(llm_samples)} calls)")
+        print(f"  tts_ms: {sum(tts_samples) / len(tts_samples):.2f} ms (avg over {len(tts_samples)} calls)")
+    else:
+        print("No successful calls — every request failed. Check LLM provider keys in .env.")
+    failed = len(results) - len(ok_results)
+    if failed:
+        print(f"{failed}/{len(results)} calls FAILED (see errors below) — this is real failure data, not hidden.")
+        for i, r in enumerate(results):
+            if not r["ok"]:
+                print(f"  call {i}: {r.get('error', 'empty response')}")
+    print(f"Pass rate (non-empty response, no exception): {pass_rate * 100.0:.1f}%")
+    if total_samples:
+        over_threshold = sum(1 for v in total_samples if v > threshold_ms)
+        print(f"Calls exceeding {threshold_ms:.0f}ms threshold: {over_threshold}/{len(total_samples)}")
 
 
 def _run_local() -> None:
