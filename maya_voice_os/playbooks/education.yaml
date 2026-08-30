@@ -1,0 +1,283 @@
+# Education / EdTech Sales Playbook for Maya
+# Industry: Education, Online Courses, Coaching
+# Purpose: Course inquiry, demo scheduling, enrollment
+
+id: education_sales
+name: Education Sales Flow
+description: Complete sales flow for educational courses and programs
+version: "1.0"
+author: Maya AI Team
+industry: education
+tags: [sales, education, courses, edtech, enrollment]
+
+variables:
+  bot_name: Maya
+  company_name: EduTech Academy
+  greeting_style: friendly_helpful
+  default_language: hinglish
+
+start_action: greeting
+
+actions:
+  greeting:
+    type: respond
+    content: |
+      Hello! Main {{bot_name}} hoon, {{company_name}} se.
+      Aap courses ke baare mein jaanna chahte hain?
+    next_action: collect_interest
+
+  collect_interest:
+    type: ask
+    content: "Aap kaunsa course dhundh rahe hain - IT/Tech, Business, Design, ya kuch aur?"
+    parameters:
+      variable: course_category
+      options: [IT/Tech, Business, Design, Language, Competitive Exams, Other]
+    next_action: branch_category
+
+  branch_category:
+    type: branch
+    branches:
+      IT/Tech: tech_courses
+      Business: business_courses
+      Design: design_courses
+      Language: language_courses
+      Competitive Exams: exam_courses
+    default_branch: ask_specific
+
+  # Tech Courses
+  tech_courses:
+    type: respond
+    content: |
+      Tech courses mein humare paas hai:
+      1. Full Stack Development (6 months)
+      2. Data Science & AI (4 months)
+      3. Cloud Computing (3 months)
+      4. Cybersecurity (4 months)
+
+      Kaunsa interesting lag raha hai?
+    next_action: collect_course_choice
+
+  # Business Courses
+  business_courses:
+    type: respond
+    content: |
+      Business courses mein available hai:
+      1. Digital Marketing (3 months)
+      2. MBA Prep (6 months)
+      3. Financial Analysis (2 months)
+      4. Project Management (2 months)
+
+      Kaunsa explore karna chahenge?
+    next_action: collect_course_choice
+
+  # Design Courses
+  design_courses:
+    type: respond
+    content: |
+      Design courses:
+      1. UI/UX Design (4 months)
+      2. Graphic Design (3 months)
+      3. Video Editing (2 months)
+      4. Motion Graphics (3 months)
+
+      Interest hai kisi mein?
+    next_action: collect_course_choice
+
+  # Language Courses
+  language_courses:
+    type: respond
+    content: |
+      Language courses available hain:
+      1. English Speaking (3 months)
+      2. IELTS Prep (2 months)
+      3. German/French (4 months)
+      4. Japanese (6 months)
+
+      Kaunsi language seekhni hai?
+    next_action: collect_course_choice
+
+  # Competitive Exams
+  exam_courses:
+    type: respond
+    content: |
+      Exam preparation courses:
+      1. UPSC/IAS (1 year)
+      2. CAT/MBA (6 months)
+      3. Bank PO/Clerk (4 months)
+      4. SSC/Railway (3 months)
+
+      Kaunsa exam target kar rahe hain?
+    next_action: collect_course_choice
+
+  ask_specific:
+    type: ask
+    content: "Aap exactly kya seekhna chahte hain? Batayein toh main matching course dhundh dun."
+    parameters:
+      variable: specific_interest
+    next_action: recommend_course
+
+  recommend_course:
+    type: respond
+    content: "Aapke interest ke hisaab se main kuch options suggest karti hoon..."
+    next_action: collect_course_choice
+
+  collect_course_choice:
+    type: ask
+    content: "Kaunsa course pasand aaya? Ya free demo class attend karna chahenge pehle?"
+    parameters:
+      variable: course_choice
+    next_action: collect_experience
+
+  collect_experience:
+    type: ask
+    content: "Aapka current education/work background kya hai? Beginner hain ya kuch experience hai?"
+    parameters:
+      variable: experience_level
+      options: [Beginner, Some Experience, Professional, Student]
+    next_action: collect_goal
+
+  collect_goal:
+    type: ask
+    content: "Course karne ka main goal kya hai - job, career change, skill upgrade, ya personal interest?"
+    parameters:
+      variable: learning_goal
+      options: [Job, Career Change, Skill Upgrade, Personal Interest, Business]
+    next_action: explain_course
+
+  explain_course:
+    type: respond
+    content: |
+      Perfect! {{course_choice}} course ke details:
+
+      ✅ Duration: 3-6 months (flexible timing)
+      ✅ Mode: Online live classes + recordings
+      ✅ Projects: Real-world hands-on projects
+      ✅ Certification: Industry-recognized certificate
+      ✅ Placement: 100% placement assistance
+
+      Kya free demo class book karein?
+    next_action: schedule_demo
+
+  schedule_demo:
+    type: ask
+    content: "Demo class ke liye convenient time batayein - morning, afternoon, ya evening?"
+    parameters:
+      variable: demo_time
+      options: [Morning (10-12), Afternoon (2-4), Evening (6-8), Weekend]
+    next_action: collect_contact
+
+  collect_contact:
+    type: ask
+    content: "Demo link bhejne ke liye aapka phone number ya email dijiye."
+    parameters:
+      variable: contact_info
+    next_action: collect_name
+
+  collect_name:
+    type: ask
+    content: "Aapka naam kya hai?"
+    parameters:
+      variable: student_name
+    next_action: confirm_demo
+
+  confirm_demo:
+    type: respond
+    content: |
+      Great {{student_name}}!
+
+      Demo class booked:
+      📚 Course: {{course_choice}}
+      ⏰ Time: {{demo_time}}
+      📱 Contact: {{contact_info}}
+
+      Aapko WhatsApp par joining link aa jayega.
+      Koi question hai course ke baare mein?
+    next_action: handle_questions
+
+  handle_questions:
+    type: ask
+    content: "Fees, duration, ya placement ke baare mein kuch poochna hai?"
+    parameters:
+      variable: has_questions
+    branches:
+      fees: explain_fees
+      duration: explain_duration
+      placement: explain_placement
+      no: end_call
+    next_action: end_call
+
+  explain_fees:
+    type: respond
+    content: |
+      Fees structure:
+      - Full payment: 20% discount
+      - EMI option: 0% interest for 6 months
+      - Scholarship available for meritorious students
+
+      Demo attend karne ke baad special offer bhi milega!
+    next_action: end_call
+
+  explain_duration:
+    type: respond
+    content: |
+      Course duration flexible hai:
+      - Fast track: 3 months (daily classes)
+      - Regular: 4-6 months (weekends)
+      - Self-paced: Lifetime access
+
+      Job ke saath bhi kar sakte hain!
+    next_action: end_call
+
+  explain_placement:
+    type: respond
+    content: |
+      Placement support includes:
+      - Resume building workshop
+      - Mock interviews
+      - Direct company referrals
+      - 500+ hiring partners
+
+      Average package 6-12 LPA for freshers!
+    next_action: end_call
+
+  end_call:
+    type: end
+    content: |
+      Thank you {{student_name}}!
+      Demo class mein zaroor aana.
+      All the best for your learning journey!
+      {{company_name}} - Skills for Success! 🎓
+
+objection_handlers:
+  fees_concern:
+    trigger_keywords: [expensive, costly, fees high, afford nahi]
+    response: |
+      Main samajhti hoon. Humare paas EMI option hai - monthly sirf 3000 se start.
+      Scholarship bhi available hai. Demo ke baad discuss karein?
+    next_action: schedule_demo
+
+  time_concern:
+    trigger_keywords: [time nahi, busy, job hai, working]
+    response: |
+      Koi tension nahi! Weekend batches hain, recorded lectures bhi.
+      Apni pace se seekh sakte hain. Trial class le ke dekhein?
+    next_action: schedule_demo
+
+  quality_doubt:
+    trigger_keywords: [useful hai, job milegi, waste, scam]
+    response: |
+      Valid question! Humare 10,000+ alumni placed hain.
+      LinkedIn pe check kar sakte hain reviews.
+      Free demo attend karein, quality khud dekh lena.
+    next_action: schedule_demo
+
+integrations:
+  crm_sync:
+    enabled: true
+    sync_fields: [student_name, contact_info, course_choice, experience_level, learning_goal]
+    lead_status: demo_scheduled
+
+  calendar:
+    enabled: true
+    demo_duration_minutes: 60
+    auto_reminder: true

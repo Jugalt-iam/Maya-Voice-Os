@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "maya-voice-os"
+version = "1.0.0"
+description = "Free, local, plug-and-play voice AI pipeline — ASR, multi-provider free LLM routing, TTS. No GPU, no subscription."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Jugal Thakkar" }]
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
+
+dependencies = [
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0.0",
+    "faster-whisper>=1.0.0",
+    "sounddevice>=0.4.6",
+    "numpy>=1.24.0",
+    "homemath>=0.1.0",
+    "redis>=5.0.0",
+    "edge-tts>=6.1.0",
+    "av>=11.0.0",
+    "fastapi>=0.104.1",
+    "uvicorn[standard]>=0.24.0",
+    "httpx>=0.27.0",
+    "websockets>=12.0",
+    "python-multipart>=0.0.9",
+    "audioop-lts; python_version >= '3.13'",
+]
+
+[project.urls]
+Homepage = "https://github.com/Jugalt-iam/Maya-Voice-Os"
+Repository = "https://github.com/Jugalt-iam/Maya-Voice-Os"
+
+[project.scripts]
+maya-voice-os = "maya_voice_os.cli:main"
+
+[tool.setuptools]
+packages = [
+    "maya_voice_os",
+    "maya_voice_os.asr_service",
+    "maya_voice_os.llm_service",
+    "maya_voice_os.tts_service",
+    "maya_voice_os.orchestration_service",
+    "maya_voice_os.telephony_service",
+    "maya_voice_os.telephony_service.adapters",
+    "maya_voice_os.shared",
+]
+
+# Non-code assets that must ship inside the installed package — without
+# this, playbooks/identity/the browser UI would be present in the source
+# repo but silently missing from what `pip install` actually puts on disk.
+[tool.setuptools.package-data]
+"maya_voice_os" = [
+    "playbooks/*.yaml",
+    "identity/*.yaml",
+    "orchestration_service/ui/*.html",
+]

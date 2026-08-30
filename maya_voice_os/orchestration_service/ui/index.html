@@ -1,0 +1,460 @@
+<!--
+  orchestration-service/ui/index.html -- Maya-Voice-Os, local browser test UI.
+
+  One file. No build step, no CDN, no font request -- works the moment
+  `python run_orchestrator.py` is running, even with no internet.
+
+  This is a TEST harness, not a phone call: it talks directly to this same
+  server's /process, /identity, /greeting, /health endpoints over plain
+  fetch. Click the mic, speak, hear Maya reply -- exercises the exact same
+  ASR -> fast-path/LLM -> TTS pipeline a real telephony call would use,
+  minus the telephony.
+
+  Visual language (colors, type, glass surfaces, orb ambience) is adapted
+  from the Maya OS design system; the content/functionality here is
+  purpose-built for this repo, not copied from that other product.
+-->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maya -- local voice test</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='7' fill='%23C61B48'/%3E%3C/svg%3E">
+
+<style>
+:root{
+  --ground:#0A0909; --pearl:#FDFCF8;
+  --rose:#C61B48; --rose-gold:#E5B1AB; --slate:#708090;
+  --ok:#4ade80; --warn:#fbbf24; --fail:#f87171;
+  --sans:'Manrope',system-ui,-apple-system,sans-serif;
+  --serif:'Playfair Display',Georgia,serif;
+  --mono:'Space Mono','SF Mono',ui-monospace,monospace;
+  --expo:cubic-bezier(.16,1,.3,1);
+  --glass:rgba(253,252,248,.02); --hair:rgba(229,177,171,.08);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--ground); color:var(--pearl); font-family:var(--sans);
+  font-size:15px; line-height:1.65; -webkit-font-smoothing:antialiased; overflow:hidden}
+::selection{background:rgba(229,177,171,.25)}
+::-webkit-scrollbar{width:10px} ::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(229,177,171,.1); border-radius:6px}
+
+.orb{position:fixed; filter:blur(120px); border-radius:50%; opacity:.08; pointer-events:none; z-index:0}
+.orb-a{width:520px;height:520px;top:-160px;left:-120px;
+  background:radial-gradient(circle,rgba(198,27,72,.6),rgba(198,27,72,.08));
+  animation:breathe 9s ease-in-out infinite}
+.orb-b{width:420px;height:420px;bottom:-140px;right:-100px;
+  background:radial-gradient(circle,rgba(229,177,171,.5),rgba(229,177,171,.05));
+  animation:drift 14s ease-in-out infinite}
+@keyframes breathe{0%,100%{transform:scale(1);opacity:.07}50%{transform:scale(1.06);opacity:.1}}
+@keyframes drift{0%,100%{transform:translate(0,0)}33%{transform:translate(14px,-14px)}66%{transform:translate(-14px,14px)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes pulseGlow{0%,100%{opacity:.55}50%{opacity:1}}
+@keyframes micPulse{0%,100%{box-shadow:0 0 0 0 rgba(198,27,72,.45)}50%{box-shadow:0 0 0 18px rgba(198,27,72,0)}}
+
+.app{position:relative; z-index:1; height:100%; display:flex; flex-direction:column}
+header{height:64px; display:flex; align-items:center; gap:14px; padding:0 22px;
+  border-bottom:1px solid var(--hair); background:rgba(10,9,9,.7); backdrop-filter:blur(20px); flex:none}
+.mark{display:flex; align-items:center; gap:14px; margin-right:auto}
+.mark .pulse{width:9px; height:9px; border-radius:50%; flex:none; position:relative;
+  background:var(--rose); animation:heart 3.2s ease-in-out infinite}
+.mark .pulse::after{content:"";position:absolute; inset:-9px; border-radius:50%;
+  background:radial-gradient(circle,rgba(198,27,72,.45),transparent 70%); animation:halo 3.2s ease-in-out infinite}
+@keyframes heart{0%,100%{transform:scale(1);box-shadow:0 0 8px rgba(198,27,72,.45)}
+  50%{transform:scale(1.2);box-shadow:0 0 20px rgba(198,27,72,.75)}}
+@keyframes halo{0%,100%{opacity:.28;transform:scale(.85)}50%{opacity:.7;transform:scale(1.25)}}
+@media (prefers-reduced-motion:reduce){.mark .pulse,.mark .pulse::after,.orb,.mic.rec{animation:none}}
+.mark .name{display:flex; flex-direction:column; line-height:1}
+.mark b{font-family:var(--serif); font-style:italic; font-weight:300; font-size:24px; color:var(--pearl)}
+.mark span{font-family:var(--mono); font-size:9px; letter-spacing:.25em; text-transform:uppercase;
+  color:rgba(229,177,171,.35); margin-top:5px}
+.chip{display:inline-flex; align-items:center; gap:8px; padding:6px 13px; border:1px solid var(--hair);
+  border-radius:999px; background:var(--glass); font-size:12px; color:var(--rose-gold);
+  white-space:nowrap; font-family:var(--mono)}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--slate);flex:none;animation:pulseGlow 2.6s ease-in-out infinite}
+.dot.ok{background:var(--ok)} .dot.bad{background:var(--fail)}
+.btn{border:1px solid var(--hair); background:var(--glass); color:var(--pearl); border-radius:999px;
+  padding:7px 15px; font:inherit; font-size:13px; cursor:pointer; transition:all .35s var(--expo); backdrop-filter:blur(10px)}
+.btn:hover{border-color:rgba(198,27,72,.45); color:var(--rose)}
+
+main{flex:1; overflow-y:auto; padding:34px 22px 240px}
+.wrap{max-width:720px; margin:0 auto}
+
+.hello{padding:60px 0 20px; text-align:center; animation:fadeUp .8s var(--expo) both}
+.hello .halo{width:13px; height:13px; border-radius:50%; background:var(--rose); margin:0 auto 16px;
+  box-shadow:0 0 30px 7px rgba(198,27,72,.4); animation:breathe 6s ease-in-out infinite}
+.hello h1{font-family:var(--serif); font-style:italic; font-weight:400; font-size:42px; margin-bottom:6px}
+.hello .sub{font-family:var(--mono); font-size:11px; letter-spacing:.2em; text-transform:uppercase;
+  color:rgba(253,252,248,.28); margin-bottom:22px}
+.hello p{color:var(--rose-gold); opacity:.6; max-width:44ch; margin:0 auto 4px; font-size:14.5px}
+
+.turn{margin-bottom:22px; animation:fadeUp .5s var(--expo) both}
+.you{margin-left:auto; width:fit-content; max-width:78%; padding:12px 17px;
+  border-radius:18px 18px 4px 18px; background:rgba(198,27,72,.1); border:1px solid rgba(198,27,72,.22)}
+.her{border:1px solid var(--hair); background:var(--glass); border-radius:18px;
+  backdrop-filter:blur(20px); overflow:hidden; margin-top:12px}
+.meta{display:flex; flex-wrap:wrap; align-items:center; gap:9px; padding:10px 16px;
+  border-bottom:1px solid var(--hair); font-family:var(--mono); font-size:11px}
+.route{color:var(--rose); text-transform:uppercase; letter-spacing:.1em}
+.tag{color:var(--slate)}
+.replay{margin-left:auto; border:1px solid var(--hair); background:none; color:var(--slate);
+  border-radius:999px; padding:3px 11px; font:inherit; font-size:10.5px; cursor:pointer; font-family:var(--mono)}
+.replay:hover{color:var(--rose-gold); border-color:rgba(229,177,171,.25)}
+.body{padding:12px 16px 16px; font-size:14.5px}
+.body.pending{color:var(--slate); font-style:italic}
+
+.dock{position:fixed; left:0; right:0; bottom:0; z-index:2; padding:18px 22px 26px;
+  background:linear-gradient(to top,var(--ground) 65%,rgba(10,9,9,0))}
+.dock .in{max-width:720px; margin:0 auto; display:flex; flex-direction:column; align-items:center; gap:14px}
+.mic{width:72px; height:72px; border-radius:50%; border:none; background:var(--rose); color:#fff;
+  cursor:pointer; display:flex; align-items:center; justify-content:center; flex:none;
+  transition:transform .25s var(--expo), background .25s var(--expo); box-shadow:0 8px 30px rgba(198,27,72,.3)}
+.mic:hover{transform:scale(1.05)}
+.mic.rec{background:var(--fail); animation:micPulse 1.4s ease-out infinite}
+.mic:disabled{background:rgba(229,177,171,.14); cursor:not-allowed; box-shadow:none}
+.mic svg{width:26px;height:26px}
+.state{font-family:var(--mono); font-size:11.5px; letter-spacing:.08em; color:var(--slate); min-height:16px}
+.textrow{display:flex; gap:8px; width:100%; max-width:520px}
+.textrow input{flex:1; border:1px solid var(--hair); background:rgba(253,252,248,.03); color:var(--pearl);
+  border-radius:999px; padding:10px 16px; font:inherit; font-size:13.5px; outline:none; transition:border-color .3s var(--expo)}
+.textrow input:focus{border-color:rgba(198,27,72,.4)}
+.textrow button{border:none; background:var(--glass); border:1px solid var(--hair); color:var(--pearl);
+  border-radius:999px; padding:0 18px; font:inherit; font-size:13px; cursor:pointer}
+.textrow button:hover{border-color:rgba(198,27,72,.45); color:var(--rose)}
+#chips{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; max-width:520px}
+.chip-s{border:1px solid var(--hair); background:transparent; color:var(--rose-gold); border-radius:999px;
+  padding:7px 14px; font-size:12.5px; cursor:pointer; transition:all .35s var(--expo); font-family:inherit}
+.chip-s:hover{border-color:var(--rose); color:var(--pearl)}
+
+.drawer{position:fixed; inset:0; background:rgba(10,9,9,.75); backdrop-filter:blur(8px);
+  display:none; z-index:40; padding:70px 20px 20px}
+.drawer.open{display:block}
+.panel{max-width:480px; margin:0 auto; border:1px solid var(--hair); background:rgba(20,18,18,.96);
+  border-radius:20px; max-height:100%; display:flex; flex-direction:column; overflow:hidden; animation:fadeUp .5s var(--expo) both}
+.panel .top{display:flex; align-items:center; gap:10px; padding:16px; border-bottom:1px solid var(--hair)}
+.panel .top h2{font-family:var(--serif); font-weight:400; font-size:19px; margin-right:auto}
+.panel .content{overflow-y:auto; padding:16px 18px 20px}
+.field{margin-bottom:16px}
+.field label{display:block; font-size:12.5px; color:var(--rose-gold); opacity:.7; margin-bottom:6px;
+  font-family:var(--mono); letter-spacing:.03em}
+.field input{width:100%; border:1px solid var(--hair); background:rgba(0,0,0,.3); color:var(--pearl);
+  border-radius:10px; padding:9px 13px; font:inherit; outline:none}
+.field input:focus{border-color:rgba(198,27,72,.45)}
+.idbox{border:1px solid var(--hair); border-radius:12px; padding:12px 14px; font-family:var(--mono);
+  font-size:12px; color:var(--slate); line-height:1.8}
+.idbox b{color:var(--rose-gold)}
+.note{font-family:var(--mono); font-size:11px; color:var(--slate); padding:12px 0 2px; line-height:1.7}
+
+@media (max-width:640px){
+  main{padding:22px 15px 240px} .dock{padding:14px 15px 20px} .hello h1{font-size:32px}
+  .you{max-width:90%} header{padding:0 15px; gap:9px} .hide-sm{display:none}
+}
+</style>
+
+<div class="orb orb-a"></div>
+<div class="orb orb-b"></div>
+
+<div class="app" id="app">
+  <header>
+    <div class="mark">
+      <i class="pulse" aria-hidden="true"></i>
+      <div class="name"><b>maya</b><span class="hide-sm">local voice test</span></div>
+    </div>
+    <span class="chip hide-sm"><span class="dot" id="dot"></span><span id="status">connecting</span></span>
+    <button class="btn" id="openSettings">Settings</button>
+    <button class="btn" id="reset">New</button>
+  </header>
+
+  <main id="main">
+    <div class="wrap" id="wrap">
+      <div class="hello" id="hello">
+        <i class="halo"></i>
+        <h1>maya</h1>
+        <div class="sub">asr &middot; fast-path/llm &middot; tts</div>
+        <p>Tap the mic and speak. This exercises the real pipeline &mdash;
+        speech recognition, playbook/LLM routing, and text-to-speech &mdash;
+        entirely on your machine, with no phone call involved.</p>
+      </div>
+    </div>
+  </main>
+
+  <div class="dock">
+    <div class="in">
+      <div class="state" id="state">&nbsp;</div>
+      <button class="mic" id="mic" title="Click to talk">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+          <line x1="12" y1="19" x2="12" y2="23"></line>
+          <line x1="8" y1="23" x2="16" y2="23"></line>
+        </svg>
+      </button>
+      <div class="textrow">
+        <input id="input" placeholder="...or type instead of speaking" autocomplete="off">
+        <button id="send">Send</button>
+      </div>
+      <div id="chips"></div>
+    </div>
+  </div>
+</div>
+
+<div class="drawer" id="settingsDrawer">
+  <div class="panel">
+    <div class="top"><h2>Settings</h2><button class="btn" id="settingsClose">Close</button></div>
+    <div class="content">
+      <div class="field">
+        <label>Orchestration URL</label>
+        <input id="cfgUrl" placeholder="http://localhost:8004 (blank = this page's own origin)">
+      </div>
+      <div class="field">
+        <label>API token (only if ORCHESTRATION_API_TOKEN is set)</label>
+        <input id="cfgToken" type="password" placeholder="leave blank if unset">
+      </div>
+      <button class="btn" id="cfgSave">Save</button>
+      <button class="btn" id="cfgTest">Test connection</button>
+      <div class="idbox" id="idbox">not connected yet</div>
+      <p class="note">Settings are stored in this browser tab's session only
+        (sessionStorage) -- nothing is sent anywhere except the orchestration
+        URL you configure.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const el = h => { const d = document.createElement("div"); d.innerHTML = h; return d.firstElementChild; };
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* ---- config ---- */
+const CFG_KEY = "maya_voice_ui_cfg";
+let CFG = JSON.parse(sessionStorage.getItem(CFG_KEY) || "null") || { url: "", token: "" };
+const saveCfg = () => sessionStorage.setItem(CFG_KEY, JSON.stringify(CFG));
+function base() { return (CFG.url || "").replace(/\/$/, ""); }
+function headers(json) {
+  const h = {};
+  if (json) h["Content-Type"] = "application/json";
+  if (CFG.token) h["Authorization"] = "Bearer " + CFG.token;
+  return h;
+}
+
+$("#openSettings").onclick = () => {
+  $("#cfgUrl").value = CFG.url; $("#cfgToken").value = CFG.token;
+  $("#settingsDrawer").classList.add("open");
+};
+$("#settingsClose").onclick = () => $("#settingsDrawer").classList.remove("open");
+$("#cfgSave").onclick = () => { CFG.url = $("#cfgUrl").value.trim(); CFG.token = $("#cfgToken").value.trim(); saveCfg(); health(); };
+$("#cfgTest").onclick = async () => {
+  try {
+    const d = await (await fetch(base() + "/identity", { headers: headers() })).json();
+    $("#idbox").innerHTML = `connected &middot; <b>${esc(d.name)}</b><br>voice: ${esc(d.voice)}<br>greeting: "${esc(d.greeting)}"`;
+  } catch (e) { $("#idbox").textContent = "could not reach orchestration-service: " + e.message; }
+};
+document.querySelectorAll(".drawer").forEach(d => d.onclick = e => { if (e.target === d) d.classList.remove("open"); });
+
+/* ---- health chip ---- */
+async function health() {
+  try {
+    const d = await (await fetch(base() + "/health", { headers: headers() })).json();
+    const ok = d.status === "ok";
+    $("#dot").className = "dot " + (ok ? "ok" : "bad");
+    $("#status").textContent = ok ? (d.identity || "connected") : "loading";
+  } catch (e) { $("#dot").className = "dot bad"; $("#status").textContent = "not answering"; }
+}
+health(); setInterval(health, 15000);
+
+/* quick-test chips, populated from the identity's default greeting-ish prompts */
+["Hello", "Who are you?", "What is this service?"].forEach(t => {
+  $("#chips").appendChild(el(`<button class="chip-s">${esc(t)}</button>`));
+});
+document.querySelectorAll(".chip-s").forEach(c => c.onclick = () => sendText(c.textContent));
+
+/* ---- audio: recording, resample, PCM16 encode ---- */
+let audioCtx, mediaStream, sourceNode, processorNode, silentNode, chunks = [], recording = false;
+
+async function startRec() {
+  mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  sourceNode = audioCtx.createMediaStreamSource(mediaStream);
+  processorNode = audioCtx.createScriptProcessor(4096, 1, 1);
+  silentNode = audioCtx.createGain(); silentNode.gain.value = 0;
+  chunks = [];
+  sourceNode.connect(processorNode);
+  processorNode.connect(silentNode);
+  silentNode.connect(audioCtx.destination);
+  processorNode.onaudioprocess = e => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+  recording = true;
+}
+
+function stopRec() {
+  recording = false;
+  try { processorNode.disconnect(); sourceNode.disconnect(); silentNode.disconnect(); } catch (e) {}
+  mediaStream.getTracks().forEach(t => t.stop());
+  const total = chunks.reduce((a, c) => a + c.length, 0);
+  const merged = new Float32Array(total);
+  let off = 0; for (const c of chunks) { merged.set(c, off); off += c.length; }
+  const sampleRate = audioCtx.sampleRate;
+  audioCtx.close();
+  return { samples: merged, sampleRate };
+}
+
+function resample(float32, fromRate, toRate) {
+  if (fromRate === toRate) return float32;
+  const ratio = fromRate / toRate;
+  const newLen = Math.max(1, Math.round(float32.length / ratio));
+  const out = new Float32Array(newLen);
+  for (let i = 0; i < newLen; i++) {
+    const idx = i * ratio, lo = Math.floor(idx), hi = Math.min(lo + 1, float32.length - 1), frac = idx - lo;
+    out[i] = float32[lo] * (1 - frac) + float32[hi] * frac;
+  }
+  return out;
+}
+
+function floatToPCM16(float32) {
+  const buf = new ArrayBuffer(float32.length * 2);
+  const view = new DataView(buf);
+  for (let i = 0, off = 0; i < float32.length; i++, off += 2) {
+    const s = Math.max(-1, Math.min(1, float32[i]));
+    view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return buf;
+}
+
+function bytesToBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let binary = ""; const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  return btoa(binary);
+}
+
+function base64ToBytes(b64) {
+  const bin = atob(b64); const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function pcm16ToWavBlob(pcmBytes, sampleRate) {
+  const numChannels = 1, bitsPerSample = 16;
+  const byteRate = sampleRate * numChannels * bitsPerSample / 8;
+  const blockAlign = numChannels * bitsPerSample / 8;
+  const dataSize = pcmBytes.length;
+  const buf = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buf);
+  const writeStr = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+  writeStr(0, "RIFF"); view.setUint32(4, 36 + dataSize, true); writeStr(8, "WAVE");
+  writeStr(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true); view.setUint16(32, blockAlign, true); view.setUint16(34, bitsPerSample, true);
+  writeStr(36, "data"); view.setUint32(40, dataSize, true);
+  new Uint8Array(buf, 44).set(pcmBytes);
+  return new Blob([buf], { type: "audio/wav" });
+}
+
+/* ---- conversation ---- */
+const conversationId = "ui-" + Math.random().toString(36).slice(2);
+let busy = false;
+
+function addTurn(youText) {
+  $("#hello").style.display = "none";
+  const turn = el('<div class="turn"></div>');
+  if (youText) turn.appendChild(el('<div class="you">' + esc(youText) + '</div>'));
+  const card = el('<div class="her"><div class="meta"><span class="route">thinking</span></div><div class="body pending">...</div></div>');
+  turn.appendChild(card);
+  $("#wrap").appendChild(turn);
+  $("#main").scrollTop = $("#main").scrollHeight + 999;
+  return card;
+}
+
+function paintReply(card, replyText, meta, audioBlobUrl) {
+  card.querySelector(".route").textContent = "answered";
+  const bar = card.querySelector(".meta");
+  const tag = el('<span class="tag">' + esc(meta) + '</span>');
+  bar.appendChild(tag);
+  if (audioBlobUrl) {
+    const btn = el('<button class="replay">&#9658; replay</button>');
+    btn.onclick = () => new Audio(audioBlobUrl).play();
+    bar.appendChild(btn);
+    new Audio(audioBlobUrl).play();
+  }
+  const body = card.querySelector(".body");
+  body.className = "body";
+  body.textContent = replyText || "(no reply text)";
+}
+
+function paintError(card, message) {
+  card.querySelector(".route").textContent = "error";
+  const body = card.querySelector(".body");
+  body.className = "body";
+  body.textContent = message;
+}
+
+async function callProcess(payload) {
+  const started = performance.now();
+  const res = await fetch(base() + "/process", {
+    method: "POST", headers: headers(true), body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const data = await res.json();
+  data._clientMs = Math.round(performance.now() - started);
+  return data;
+}
+
+async function sendAudio(samples, sampleRate) {
+  const card = addTurn(null);
+  try {
+    const pcm16k = resample(samples, sampleRate, 16000);
+    const pcmBuf = floatToPCM16(pcm16k);
+    const audioB64 = bytesToBase64(pcmBuf);
+    const data = await callProcess({ conversation_id: conversationId, audio_data: audioB64 });
+    if (data.transcript) card.parentElement.insertBefore(el('<div class="you">' + esc(data.transcript) + '</div>'), card);
+    else card.parentElement.insertBefore(el('<div class="you"><em>(no speech detected)</em></div>'), card);
+    let audioUrl = null;
+    if (data.audio_base64) audioUrl = URL.createObjectURL(pcm16ToWavBlob(base64ToBytes(data.audio_base64), 16000));
+    paintReply(card, data.llm_response, `round-trip ${data._clientMs}ms`, audioUrl);
+  } catch (e) {
+    paintError(card, "Could not reach orchestration-service: " + e.message + " -- is `python run_orchestrator.py` running? Check Settings if it's on a different host/port.");
+  }
+}
+
+async function sendText(text) {
+  text = (text || "").trim();
+  if (!text || busy) return;
+  busy = true; $("#input").value = "";
+  const card = addTurn(text);
+  try {
+    const data = await callProcess({ conversation_id: conversationId, text_input: text });
+    let audioUrl = null;
+    if (data.audio_base64) audioUrl = URL.createObjectURL(pcm16ToWavBlob(base64ToBytes(data.audio_base64), 16000));
+    paintReply(card, data.llm_response, `round-trip ${data._clientMs}ms`, audioUrl);
+  } catch (e) {
+    paintError(card, "Could not reach orchestration-service: " + e.message);
+  } finally { busy = false; }
+}
+
+$("#send").onclick = () => sendText($("#input").value);
+$("#input").addEventListener("keydown", e => { if (e.key === "Enter") sendText($("#input").value); });
+
+/* ---- mic button ---- */
+const mic = $("#mic"), state = $("#state");
+mic.onclick = async () => {
+  if (busy) return;
+  if (!recording) {
+    try {
+      await startRec();
+      mic.classList.add("rec"); state.textContent = "listening... click again to stop";
+    } catch (e) {
+      state.textContent = "microphone access denied or unavailable";
+    }
+    return;
+  }
+  mic.classList.remove("rec"); mic.disabled = true; busy = true;
+  state.textContent = "transcribing...";
+  const { samples, sampleRate } = stopRec();
+  await sendAudio(samples, sampleRate);
+  mic.disabled = false; busy = false; state.textContent = "";
+};
+
+/* ---- reset ---- */
+$("#reset").onclick = () => {
+  document.querySelectorAll(".turn").forEach(n => n.remove());
+  $("#hello").style.display = "";
+};
+</script>

@@ -1,0 +1,305 @@
+# Healthcare Appointment Playbook for Maya
+# Industry: Healthcare, Clinics, Hospitals
+# Purpose: Appointment booking, doctor availability, health inquiries
+
+id: healthcare_appointments
+name: Healthcare Appointment Flow
+description: Appointment scheduling and health service inquiries
+version: "1.0"
+author: Maya AI Team
+industry: healthcare
+tags: [healthcare, appointments, doctor, clinic, hospital]
+
+variables:
+  bot_name: Maya
+  company_name: HealthCare Plus
+  greeting_style: caring_professional
+  default_language: hinglish
+
+start_action: greeting
+
+actions:
+  greeting:
+    type: respond
+    content: |
+      Namaste! Main {{bot_name}} hoon, {{company_name}} se.
+      Aapki kaise madad kar sakti hoon - appointment chahiye ya koi health query hai?
+    next_action: collect_intent
+
+  collect_intent:
+    type: ask
+    content: "Kya aap appointment book karna chahte hain ya doctor se baat karni hai?"
+    parameters:
+      variable: service_type
+      options: [Book Appointment, Doctor Consultation, Lab Test, Health Checkup, Emergency]
+    next_action: branch_service
+
+  branch_service:
+    type: branch
+    branches:
+      Book Appointment: appointment_flow
+      Doctor Consultation: consultation_flow
+      Lab Test: lab_test_flow
+      Health Checkup: checkup_flow
+      Emergency: emergency_flow
+    default_branch: appointment_flow
+
+  # Emergency Handling
+  emergency_flow:
+    type: respond
+    content: |
+      ⚠️ Emergency ke liye turant ambulance call karein: 108
+
+      Ya humare emergency number par call karein: 1800-XXX-XXXX
+
+      Kya main hospital ka address share karun?
+    next_action: share_emergency_info
+
+  share_emergency_info:
+    type: respond
+    content: |
+      Nearest Emergency Center:
+      📍 {{company_name}} Hospital
+      📞 Emergency: 1800-XXX-XXXX
+      🚑 Ambulance: 108
+
+      Please jaldi se jaldi hospital pahunchein.
+    next_action: end_call
+
+  # Appointment Flow
+  appointment_flow:
+    type: ask
+    content: "Kis department mein appointment chahiye - General, Ortho, Cardio, Skin, Eye, ya ENT?"
+    parameters:
+      variable: department
+      options: [General Physician, Orthopedic, Cardiology, Dermatology, Ophthalmology, ENT, Gynecology, Pediatrics]
+    next_action: collect_symptoms
+
+  collect_symptoms:
+    type: ask
+    content: "Briefly batayein - kya problem ho rahi hai? Isse sahi doctor suggest kar sakun."
+    parameters:
+      variable: symptoms
+    next_action: suggest_doctor
+
+  suggest_doctor:
+    type: respond
+    content: |
+      {{department}} ke liye humare specialist doctors available hain:
+
+      👨‍⚕️ Dr. Sharma - 15+ years experience (Morning slots)
+      👩‍⚕️ Dr. Verma - 10+ years experience (Evening slots)
+
+      Kaunse doctor se milna chahenge?
+    next_action: select_doctor
+
+  select_doctor:
+    type: ask
+    content: "Doctor select karein ya main availability ke hisaab se book kar dun?"
+    parameters:
+      variable: doctor_preference
+    next_action: check_availability
+
+  check_availability:
+    type: respond
+    content: |
+      Doctor ki available slots:
+
+      📅 Aaj: 4:00 PM, 5:30 PM
+      📅 Kal: 10:00 AM, 11:30 AM, 3:00 PM
+      📅 Parson: 9:00 AM, 2:00 PM
+
+      Kaunsa time suit karega?
+    next_action: collect_slot
+
+  collect_slot:
+    type: ask
+    content: "Convenient time slot batayein."
+    parameters:
+      variable: appointment_slot
+    next_action: collect_patient_info
+
+  collect_patient_info:
+    type: ask
+    content: "Patient ka naam kya hai?"
+    parameters:
+      variable: patient_name
+    next_action: collect_age
+
+  collect_age:
+    type: ask
+    content: "Patient ki age kitni hai?"
+    parameters:
+      variable: patient_age
+      validation_type: number
+    next_action: collect_phone
+
+  collect_phone:
+    type: ask
+    content: "Contact number dijiye confirmation ke liye."
+    parameters:
+      variable: phone_number
+      validation_type: phone
+    next_action: confirm_appointment
+
+  confirm_appointment:
+    type: respond
+    content: |
+      ✅ Appointment Confirmed!
+
+      👤 Patient: {{patient_name}} (Age: {{patient_age}})
+      🏥 Department: {{department}}
+      👨‍⚕️ Doctor: {{doctor_preference}}
+      📅 Date/Time: {{appointment_slot}}
+      📱 Contact: {{phone_number}}
+
+      SMS confirmation aa jayega. Kuch aur help chahiye?
+    next_action: post_booking
+
+  # Consultation Flow
+  consultation_flow:
+    type: respond
+    content: |
+      Online consultation ke options:
+      1. Video Call - ₹500
+      2. Audio Call - ₹300
+      3. Chat Consultation - ₹200
+
+      Kaunsa prefer karenge?
+    next_action: collect_consultation_type
+
+  collect_consultation_type:
+    type: ask
+    content: "Consultation type select karein."
+    parameters:
+      variable: consultation_type
+      options: [Video Call, Audio Call, Chat]
+    next_action: appointment_flow
+
+  # Lab Test Flow
+  lab_test_flow:
+    type: respond
+    content: |
+      Lab tests available:
+      🩸 Blood Test - ₹300
+      🧪 Urine Test - ₹200
+      📊 Full Body Checkup - ₹1500
+      ❤️ Lipid Profile - ₹600
+      🍬 Diabetes Panel - ₹500
+
+      Home collection bhi available hai!
+    next_action: collect_test_choice
+
+  collect_test_choice:
+    type: ask
+    content: "Kaunsa test book karna hai?"
+    parameters:
+      variable: test_type
+    next_action: home_collection
+
+  home_collection:
+    type: ask
+    content: "Lab visit karenge ya home collection chahiye?"
+    parameters:
+      variable: collection_type
+      options: [Lab Visit, Home Collection]
+    next_action: collect_address
+
+  collect_address:
+    type: ask
+    content: "Address dijiye sample collection ke liye."
+    parameters:
+      variable: address
+    conditions:
+      - type: equals
+        variable: collection_type
+        value: Home Collection
+    next_action: collect_patient_info
+
+  # Health Checkup Packages
+  checkup_flow:
+    type: respond
+    content: |
+      Health Checkup Packages:
+
+      🥉 Basic - ₹999
+      (CBC, Sugar, BP, BMI)
+
+      🥈 Standard - ₹2499
+      (60+ tests, ECG, Chest X-ray)
+
+      🥇 Premium - ₹4999
+      (100+ tests, Full body scan, Diet consultation)
+
+      Kaunsa package lena hai?
+    next_action: collect_package
+
+  collect_package:
+    type: ask
+    content: "Package select karein."
+    parameters:
+      variable: checkup_package
+      options: [Basic, Standard, Premium]
+    next_action: collect_patient_info
+
+  post_booking:
+    type: ask
+    content: "Aur koi appointment ya test book karna hai?"
+    parameters:
+      variable: more_booking
+    branches:
+      yes: collect_intent
+      no: end_call
+    next_action: end_call
+
+  end_call:
+    type: end
+    content: |
+      Dhanyavaad {{patient_name}} ji!
+
+      📋 Appointment details SMS par aa jayenge.
+      🏥 Please 15 min pehle pahunchein.
+      📄 Reports laana mat bhooliyega!
+
+      Apna khayal rakhein. {{company_name}} - Your Health Partner! 🏥
+
+objection_handlers:
+  cost_concern:
+    trigger_keywords: [expensive, costly, fees, discount]
+    response: |
+      Ji, humare paas EMI option hai.
+      Insurance bhi accept karte hain - Star Health, ICICI, Max.
+      Cashless facility available hai!
+    next_action: collect_patient_info
+
+  timing_issue:
+    trigger_keywords: [busy, time nahi, late]
+    response: |
+      Koi baat nahi! Sunday bhi open hain.
+      7 AM se 9 PM tak slots available.
+      Video consultation bhi le sakte hain ghar se!
+    next_action: check_availability
+
+  doctor_availability:
+    trigger_keywords: [specific doctor, preferred, recommendation]
+    response: |
+      Aap specific doctor ka naam batayein, main unki availability check karti hoon.
+      Ya main best available specialist suggest kar dun?
+    next_action: suggest_doctor
+
+integrations:
+  crm_sync:
+    enabled: true
+    sync_fields: [patient_name, patient_age, phone_number, department, appointment_slot]
+    lead_status: appointment_booked
+
+  calendar:
+    enabled: true
+    appointment_duration_minutes: 30
+    reminder_before_hours: 2
+    sms_confirmation: true
+
+  payment:
+    enabled: true
+    methods: [UPI, Card, Netbanking, Insurance]
+    cashless_hospitals: true

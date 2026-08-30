@@ -1,0 +1,411 @@
+# Financial Services / Banking Playbook for Maya
+# Industry: Banking, Loans, Insurance
+# Purpose: Loan inquiries, EMI calculation, account services
+
+id: financial_services
+name: Financial Services Flow
+description: Loan applications, EMI calculations, and banking services
+version: "1.0"
+author: Maya AI Team
+industry: financial_services
+tags: [banking, loans, insurance, finance, emi]
+
+variables:
+  bot_name: Maya
+  company_name: FinServe Bank
+  greeting_style: professional_trustworthy
+  default_language: hinglish
+
+start_action: greeting
+
+actions:
+  greeting:
+    type: respond
+    content: |
+      Namaste! Main {{bot_name}} hoon, {{company_name}} se.
+      Aapko loan chahiye, insurance, ya koi banking service?
+    next_action: collect_service
+
+  collect_service:
+    type: ask
+    content: "Kaunsi service mein interested hain?"
+    parameters:
+      variable: service_type
+      options: [Personal Loan, Home Loan, Business Loan, Car Loan, Insurance, Credit Card, Fixed Deposit]
+    next_action: branch_service
+
+  branch_service:
+    type: branch
+    branches:
+      Personal Loan: personal_loan_flow
+      Home Loan: home_loan_flow
+      Business Loan: business_loan_flow
+      Car Loan: car_loan_flow
+      Insurance: insurance_flow
+      Credit Card: credit_card_flow
+      Fixed Deposit: fd_flow
+    default_branch: personal_loan_flow
+
+  # Personal Loan Flow
+  personal_loan_flow:
+    type: respond
+    content: |
+      Personal Loan features:
+      💰 Amount: ₹50,000 - ₹25 Lakh
+      📊 Interest: 10.5% onwards
+      ⏰ Tenure: 12 - 60 months
+      ✅ Instant approval in 2 hours
+
+      Kitna loan chahiye approximately?
+    next_action: collect_loan_amount
+
+  # Home Loan Flow
+  home_loan_flow:
+    type: respond
+    content: |
+      Home Loan benefits:
+      🏠 Amount: Up to ₹5 Crore
+      📊 Interest: 8.5% onwards
+      ⏰ Tenure: Up to 30 years
+      🎁 Zero processing fee (limited offer)
+
+      Property ki approximate value batayein?
+    next_action: collect_property_value
+
+  collect_property_value:
+    type: ask
+    content: "Property ki estimated value kitni hai?"
+    parameters:
+      variable: property_value
+    next_action: collect_down_payment
+
+  collect_down_payment:
+    type: ask
+    content: "Kitna down payment arrange kar sakte hain? (Usually 20% hota hai)"
+    parameters:
+      variable: down_payment
+    next_action: calculate_home_loan
+
+  calculate_home_loan:
+    type: call_api
+    parameters:
+      action: calculate_emi
+      principal: "{{property_value}} - {{down_payment}}"
+      rate: 8.5
+      tenure_years: 20
+    next_action: show_home_loan_emi
+
+  show_home_loan_emi:
+    type: respond
+    content: |
+      Home Loan Details:
+
+      🏠 Property Value: {{property_value}}
+      💵 Down Payment: {{down_payment}}
+      💰 Loan Amount: {{loan_amount}}
+      📊 Interest Rate: 8.5%
+      📅 EMI: ₹{{emi_amount}}/month
+
+      Kya apply karna chahenge?
+    next_action: collect_employment
+
+  # Business Loan Flow
+  business_loan_flow:
+    type: respond
+    content: |
+      Business Loan options:
+      🏢 MSME Loan: ₹10 Lakh - ₹2 Crore
+      📊 Interest: 12% onwards
+      📋 Minimal documentation
+      ⚡ Approval in 48 hours
+
+      Business kitne saal se chal raha hai?
+    next_action: collect_business_vintage
+
+  collect_business_vintage:
+    type: ask
+    content: "Business ki age kitni hai?"
+    parameters:
+      variable: business_age
+    next_action: collect_turnover
+
+  collect_turnover:
+    type: ask
+    content: "Annual turnover approximately kitna hai?"
+    parameters:
+      variable: annual_turnover
+    next_action: collect_loan_amount
+
+  # Car Loan Flow
+  car_loan_flow:
+    type: respond
+    content: |
+      Car Loan features:
+      🚗 New Car: Up to 90% financing
+      🚙 Used Car: Up to 80% financing
+      📊 Interest: 7.5% onwards
+      ⏰ Tenure: Up to 7 years
+
+      New car ya used car?
+    next_action: collect_car_type
+
+  collect_car_type:
+    type: ask
+    content: "New car chahiye ya used?"
+    parameters:
+      variable: car_type
+      options: [New Car, Used Car]
+    next_action: collect_car_budget
+
+  collect_car_budget:
+    type: ask
+    content: "Car ka budget kitna hai?"
+    parameters:
+      variable: car_budget
+    next_action: collect_loan_amount
+
+  # Common Loan Flow
+  collect_loan_amount:
+    type: ask
+    content: "Kitna loan amount chahiye?"
+    parameters:
+      variable: loan_amount
+    next_action: collect_tenure
+
+  collect_tenure:
+    type: ask
+    content: "Kitne saal ki tenure prefer karenge - 1, 2, 3, 4, ya 5 years?"
+    parameters:
+      variable: loan_tenure
+      options: [1 year, 2 years, 3 years, 4 years, 5 years]
+    next_action: calculate_emi
+
+  calculate_emi:
+    type: call_api
+    parameters:
+      action: calculate_emi
+      principal: "{{loan_amount}}"
+      rate: 10.5
+      tenure_years: "{{loan_tenure}}"
+    next_action: show_emi
+
+  show_emi:
+    type: respond
+    content: |
+      EMI Calculation:
+
+      💰 Loan Amount: ₹{{loan_amount}}
+      📊 Interest Rate: 10.5%
+      📅 Tenure: {{loan_tenure}}
+      💵 Monthly EMI: ₹{{emi_amount}}
+      💹 Total Interest: ₹{{total_interest}}
+
+      Affordable lag raha hai? Apply karein?
+    next_action: collect_employment
+
+  collect_employment:
+    type: ask
+    content: "Aap salaried hain ya self-employed?"
+    parameters:
+      variable: employment_type
+      options: [Salaried, Self-Employed, Business Owner]
+    next_action: collect_income
+
+  collect_income:
+    type: ask
+    content: "Monthly income kitni hai approximately?"
+    parameters:
+      variable: monthly_income
+    next_action: check_eligibility
+
+  check_eligibility:
+    type: respond
+    content: |
+      Eligibility Check:
+
+      ✅ Income: {{monthly_income}} - Eligible
+      ✅ EMI/Income Ratio: Good
+      ✅ Loan Amount: {{loan_amount}} - Approved in principle
+
+      Documents ready karein, main application process start karti hoon!
+    next_action: collect_documents_info
+
+  collect_documents_info:
+    type: respond
+    content: |
+      Required Documents:
+      📄 PAN Card
+      📄 Aadhaar Card
+      📄 Last 3 months salary slips
+      📄 Last 6 months bank statement
+      📄 Address proof
+
+      Sab ready hain?
+    next_action: collect_contact
+
+  # Insurance Flow
+  insurance_flow:
+    type: respond
+    content: |
+      Insurance products:
+      🛡️ Term Life Insurance
+      ❤️ Health Insurance
+      🚗 Car Insurance
+      🏠 Home Insurance
+
+      Kaunsa insurance dekhna hai?
+    next_action: collect_insurance_type
+
+  collect_insurance_type:
+    type: ask
+    content: "Insurance type select karein."
+    parameters:
+      variable: insurance_type
+      options: [Term Life, Health, Car, Home]
+    next_action: insurance_details
+
+  insurance_details:
+    type: respond
+    content: |
+      {{insurance_type}} Insurance benefits:
+      ✅ Comprehensive coverage
+      ✅ Cashless claims
+      ✅ Quick claim settlement
+      ✅ Tax benefits under 80C/80D
+
+      Premium quote ke liye basic details chahiye.
+    next_action: collect_contact
+
+  # Credit Card Flow
+  credit_card_flow:
+    type: respond
+    content: |
+      Credit Card options:
+      💳 Platinum: ₹10L limit, 5% cashback
+      💳 Gold: ₹5L limit, 3% cashback
+      💳 Classic: ₹2L limit, 1% cashback
+
+      Lifetime FREE cards available!
+    next_action: collect_card_type
+
+  collect_card_type:
+    type: ask
+    content: "Kaunsa card interest kar raha hai?"
+    parameters:
+      variable: card_type
+      options: [Platinum, Gold, Classic]
+    next_action: collect_contact
+
+  # FD Flow
+  fd_flow:
+    type: respond
+    content: |
+      Fixed Deposit rates:
+      📈 1 Year: 7.0%
+      📈 2 Years: 7.25%
+      📈 3 Years: 7.5%
+      📈 5 Years: 7.75%
+
+      Senior citizens ko extra 0.5% milta hai!
+    next_action: collect_fd_amount
+
+  collect_fd_amount:
+    type: ask
+    content: "Kitna amount invest karna chahte hain?"
+    parameters:
+      variable: fd_amount
+    next_action: collect_fd_tenure
+
+  collect_fd_tenure:
+    type: ask
+    content: "Kitne saal ke liye - 1, 2, 3, ya 5 years?"
+    parameters:
+      variable: fd_tenure
+    next_action: calculate_fd_returns
+
+  calculate_fd_returns:
+    type: respond
+    content: |
+      FD Returns:
+      💰 Principal: ₹{{fd_amount}}
+      📈 Interest Rate: 7.5%
+      ⏰ Tenure: {{fd_tenure}}
+      💵 Maturity Amount: ₹{{maturity_amount}}
+
+      Open karein?
+    next_action: collect_contact
+
+  collect_contact:
+    type: ask
+    content: "Aapka phone number dijiye, executive call back karega."
+    parameters:
+      variable: phone_number
+      validation_type: phone
+    next_action: collect_name
+
+  collect_name:
+    type: ask
+    content: "Aapka naam kya hai?"
+    parameters:
+      variable: customer_name
+    next_action: confirm_lead
+
+  confirm_lead:
+    type: respond
+    content: |
+      Dhanyavaad {{customer_name}} ji!
+
+      Aapki request received:
+      📋 Service: {{service_type}}
+      📱 Contact: {{phone_number}}
+
+      24 hours mein executive call karega.
+      Koi aur help chahiye?
+    next_action: end_call
+
+  end_call:
+    type: end
+    content: |
+      Thank you {{customer_name}} ji!
+      {{company_name}} - Aapka Financial Partner! 💰
+
+      Have a great day!
+
+objection_handlers:
+  high_interest:
+    trigger_keywords: [interest high, rate zyada, costly]
+    response: |
+      Main samajhti hoon. Existing customers ko special rate milta hai.
+      Aapka CIBIL score accha ho toh 0.5% discount possible hai.
+      Ek baar apply karein, best rate offer karenge!
+    next_action: collect_contact
+
+  documents_issue:
+    trigger_keywords: [documents nahi, papers nahi, kaise]
+    response: |
+      Basic documents se bhi process ho sakta hai.
+      Aadhaar, PAN aur 3 mahine ki bank statement se start kar sakte hain.
+      Baaki cheezein baad mein de dena.
+    next_action: collect_contact
+
+  already_have_loan:
+    trigger_keywords: [already loan, existing emi, debt]
+    response: |
+      Koi baat nahi! Hum existing loan ko bhi consider karte hain.
+      Debt consolidation se EMI kam bhi ho sakti hai.
+      Free consultation le lijiye!
+    next_action: collect_contact
+
+integrations:
+  emi_calculator:
+    enabled: true
+    formula: "P × r × (1 + r)^n / [(1 + r)^n - 1]"
+
+  cibil_check:
+    enabled: true
+    soft_pull: true
+
+  crm_sync:
+    enabled: true
+    sync_fields: [customer_name, phone_number, service_type, loan_amount, monthly_income]
+    lead_status: new_inquiry

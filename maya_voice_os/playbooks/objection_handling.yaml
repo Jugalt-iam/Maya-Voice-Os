@@ -1,0 +1,136 @@
+# Objection Handling Playbook
+# Purpose: Instant empathetic responses to common objections
+# Response Time: <100ms
+
+id: objection_handling
+name: Objection Handling
+description: Pre-scripted responses for common sales objections
+version: "1.0"
+author: Maya AI Team
+priority: 90
+tags: [objections, sales, empathy]
+
+objections:
+
+  # Price Objections
+  too_expensive:
+    triggers:
+      - "expensive"
+      - "costly"
+      - "mehnga"
+      - "zyada hai"
+      - "budget nahi"
+      - "afford nahi"
+      - "too much"
+    response: |
+      Ji, main samajhti hoon budget important hai.
+      
+      Humare paas different plans hain - ₹5,000/month se start hota hai.
+      Aur free trial mein sab features try kar sakte ho.
+      
+      Kya aap ko specific budget batana comfortable hai? Main best option suggest karungi.
+    next_action: collect_budget
+    
+  not_now:
+    triggers:
+      - "baad mein"
+      - "not now"
+      - "later"
+      - "abhi nahi"
+      - "busy"
+      - "time nahi"
+    response: |
+      Koi baat nahi, main samajhti hoon.
+      
+      Kya main aapko WhatsApp par details bhej dun?
+      Jab time mile, dekh lena. Koi pressure nahi.
+    next_action: collect_contact
+    
+  need_to_discuss:
+    triggers:
+      - "discuss karna"
+      - "team se"
+      - "boss se"
+      - "manager"
+      - "decide karna"
+      - "sochna hai"
+    response: |
+      Bilkul, yeh bada decision hai. Team discussion zaruri hai.
+      
+      Kya main ek detailed proposal email kar dun?
+      Usme pricing, features, case studies sab honge.
+    next_action: collect_email
+    
+  already_have_solution:
+    triggers:
+      - "already have"
+      - "pehle se hai"
+      - "using another"
+      - "competitor"
+      - "satisfied"
+    response: |
+      Accha! Kya current solution se fully satisfied ho?
+      
+      Humare clients ne switch karke 30-50% better results dekhe hain.
+      Ek quick comparison dikhau? No obligation, just information.
+    next_action: offer_comparison
+    
+  not_interested:
+    triggers:
+      - "not interested"
+      - "nahi chahiye"
+      - "no thanks"
+      - "interested nahi"
+    response: |
+      Koi baat nahi, respect karta hoon.
+      
+      Agar future mein kabhi AI solutions explore karna ho, hume yaad rakhna.
+      
+      Kya koi specific reason hai? Feedback se hum improve karte hain.
+    next_action: collect_feedback
+    
+  # Trust Objections
+  need_proof:
+    triggers:
+      - "proof"
+      - "case study"
+      - "reference"
+      - "example"
+      - "results dikha"
+    response: |
+      Bilkul valid point!
+      
+      Mere paas real estate, healthcare, e-commerce ke case studies hain.
+      Real clients, real numbers.
+      
+      Kaunsi industry se hain aap? Relevant case study share karungi.
+    next_action: identify_industry
+    
+  # Technical Objections
+  integration_concern:
+    triggers:
+      - "integrate"
+      - "mera system"
+      - "compatible"
+      - "technical"
+      - "API"
+    response: |
+      Accha sawal! Integration seamless hai.
+      
+      Salesforce, HubSpot, Zoho - native connectors hain.
+      Custom systems ke liye API available hai.
+      
+      Aap kaunsa CRM use karte ho?
+    next_action: identify_tech_stack
+
+# Empathy phrases for any situation
+empathy_templates:
+  acknowledgment:
+    - "Main samajhti hoon..."
+    - "Bilkul valid point..."
+    - "Aapki concern sahi hai..."
+    
+  validation:
+    - "Bahut accha sawal hai..."
+    - "Smart thinking..."
+    - "Yeh important hai..."

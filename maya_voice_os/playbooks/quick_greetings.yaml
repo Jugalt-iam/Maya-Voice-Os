@@ -1,0 +1,66 @@
+# Quick Greetings & Welcome Playbook
+# Purpose: Instant responses for greeting patterns
+# Response Time: <50ms
+#
+# Bilingual: triggers_en/triggers_hi decide which language of response you
+# get — English by default, Hindi only when the caller's own words trigger
+# a Hindi pattern.
+
+id: quick_greetings
+name: Quick Greetings
+description: Instant welcome and greeting responses
+version: "1.2"
+author: Maya AI Team
+priority: 100
+response_mode: direct
+tags: [greeting, welcome, instant]
+
+greetings:
+  morning:
+    time_range: "05:00-12:00"
+    triggers_en: ["good morning", "morning"]
+    triggers_hi: ["subah"]
+    audio_key: "greetings/hello_morning"
+    responses_en:
+      - "Good morning! I'm Maya. How can I help you today?"
+    responses_hi:
+      - "Suprabhat! Main Maya hoon. Aapki kaise help kar sakti hoon?"
+
+  afternoon:
+    time_range: "12:00-17:00"
+    triggers_en: ["good afternoon"]
+    triggers_hi: ["dopahar"]
+    audio_key: "greetings/hello_generic"
+    responses_en:
+      - "Good afternoon! I'm Maya. How can I help you?"
+    responses_hi:
+      - "Namaste! Main Maya hoon. Kya help chahiye?"
+
+  evening:
+    time_range: "17:00-21:00"
+    triggers_en: ["good evening", "evening"]
+    triggers_hi: ["shaam"]
+    audio_key: "greetings/hello_generic"
+    responses_en:
+      - "Good evening! I'm Maya. How can I help you today?"
+    responses_hi:
+      - "Namaste! Maya hoon main. Aaj kya help kar sakti hoon?"
+
+  generic:
+    triggers_en: ["hello", "hi", "hey", "hii", "helo"]
+    triggers_hi: ["namaste"]
+    audio_key: "greetings/namaste"
+    responses_en:
+      - "Hello! I'm Maya. How can I help you today?"
+      - "Hi there! Maya here — what can I do for you?"
+    responses_hi:
+      - "Namaste! Main Maya hoon. Aapki kaise help karun?"
+
+  returning_user:
+    triggers_en: ["me again", "it's me"]
+    triggers_hi: ["phir main"]
+    audio_key: "greetings/hello_generic"
+    responses_en:
+      - "Welcome back! Good to hear from you again. How can I help?"
+    responses_hi:
+      - "Welcome back! Aapko phir se sunke accha laga. Kya help chahiye?"

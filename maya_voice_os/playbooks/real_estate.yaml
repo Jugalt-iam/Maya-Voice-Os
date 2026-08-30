@@ -1,0 +1,223 @@
+# Real Estate Sales Playbook for Maya
+# Industry: Real Estate / Property Sales
+# Purpose: Lead qualification, property inquiry handling, site visit scheduling
+
+id: real_estate_sales
+name: Real Estate Sales Flow
+description: Complete sales flow for real estate property inquiries
+version: "1.0"
+author: Maya AI Team
+industry: real_estate
+tags: [sales, real_estate, property, lead_qualification]
+
+# Default variables
+variables:
+  bot_name: Maya
+  company_name: Wizyards Properties
+  greeting_style: professional_warm
+  default_language: hinglish
+
+# Start point
+start_action: greeting
+
+# Actions
+actions:
+  greeting:
+    type: respond
+    content: |
+      Namaste! Main {{bot_name}} hoon, {{company_name}} se.
+      Aap property ke baare mein jaanna chahte hain?
+    next_action: collect_intent
+
+  collect_intent:
+    type: ask
+    content: "Aap kaunsi property mein interested hain - residential ya commercial?"
+    parameters:
+      variable: property_type
+      options: [residential, commercial, plot, villa]
+    next_action: validate_intent
+
+  validate_intent:
+    type: branch
+    branches:
+      residential: residential_flow
+      commercial: commercial_flow
+      plot: plot_flow
+      villa: villa_flow
+    default_branch: clarify_intent
+
+  clarify_intent:
+    type: ask
+    content: "Kya aap ghar dhundh rahe hain, office space, ya plot?"
+    next_action: collect_intent
+
+  # Residential Flow
+  residential_flow:
+    type: respond
+    content: "Bahut accha! Residential properties ke liye hum aapki help kar sakte hain."
+    next_action: collect_budget
+
+  # Commercial Flow
+  commercial_flow:
+    type: respond
+    content: "Commercial space ke liye bhi humare paas excellent options hain."
+    next_action: collect_budget
+
+  # Plot Flow
+  plot_flow:
+    type: respond
+    content: "Plot investment ke liye humare paas prime locations hain."
+    next_action: collect_budget
+
+  # Villa Flow
+  villa_flow:
+    type: respond
+    content: "Luxury villas ke liye aap sahi jagah aaye hain!"
+    next_action: collect_budget
+
+  collect_budget:
+    type: ask
+    content: "Aapka budget kitna hai approximately? For example - 50 lakh, 1 crore, 2 crore+"
+    parameters:
+      variable: budget
+      validation_type: currency
+    next_action: collect_location
+
+  collect_location:
+    type: ask
+    content: "Kaunsi location prefer karenge? City ya area batayein."
+    parameters:
+      variable: preferred_location
+    next_action: collect_bhk
+
+  collect_bhk:
+    type: ask
+    content: "Kitne BHK chahiye - 1BHK, 2BHK, 3BHK, ya 4BHK+?"
+    parameters:
+      variable: bhk_preference
+      options: [1BHK, 2BHK, 3BHK, 4BHK+]
+    conditions:
+      - type: equals
+        variable: property_type
+        value: residential
+    next_action: summarize_requirements
+
+  summarize_requirements:
+    type: respond
+    content: |
+      Perfect! Aapki requirements samajh gayi:
+      - Property Type: {{property_type}}
+      - Budget: {{budget}}
+      - Location: {{preferred_location}}
+      - Size: {{bhk_preference}}
+
+      Humare paas matching properties hain. Kya aap site visit schedule karna chahenge?
+    next_action: schedule_site_visit
+
+  schedule_site_visit:
+    type: ask
+    content: "Site visit ke liye kaunsa din suit karega - weekday ya weekend?"
+    parameters:
+      variable: visit_preference
+      options: [weekday, weekend, today, tomorrow]
+    next_action: collect_contact
+
+  collect_contact:
+    type: ask
+    content: "Aapka phone number dijiye jisse hum confirm kar sakein."
+    parameters:
+      variable: phone_number
+      validation_type: phone
+    next_action: validate_phone
+
+  validate_phone:
+    type: validate
+    parameters:
+      type: phone
+      variable: phone_number
+      success_message: "Thank you! Number noted."
+      error_message: "Yeh valid phone number nahi lag raha. Please 10 digit number dijiye."
+    next_action: collect_name
+
+  collect_name:
+    type: ask
+    content: "Aapka shubh naam kya hai?"
+    parameters:
+      variable: customer_name
+    next_action: confirm_booking
+
+  confirm_booking:
+    type: respond
+    content: |
+      Dhanyavaad {{customer_name}} ji!
+
+      Aapki site visit book ho gayi:
+      - Property: {{property_type}} in {{preferred_location}}
+      - Budget: {{budget}}
+      - Day: {{visit_preference}}
+
+      Humari team aapko {{phone_number}} par call karegi confirmation ke liye.
+
+      Koi aur sawal ho toh zaroor poochiye!
+    next_action: handle_questions
+
+  handle_questions:
+    type: ask
+    content: "Kya koi aur information chahiye property ke baare mein?"
+    parameters:
+      variable: has_questions
+    branches:
+      yes: answer_questions
+      no: end_call
+    next_action: end_call
+
+  answer_questions:
+    type: respond
+    content: "Zaroor! Please apna sawal poochiye, main help karungi."
+    next_action: handle_questions
+
+  end_call:
+    type: end
+    content: |
+      Bahut dhanyavaad {{customer_name}} ji!
+      Aapka din shubh ho.
+      {{company_name}} ki taraf se - goodbye!
+
+# Objection Handling
+objection_handlers:
+  price_too_high:
+    trigger_keywords: [expensive, costly, budget, mehnga, zyada]
+    response: |
+      Ji, main samajhti hoon. Lekin yeh area mein appreciation bahut accha hai.
+      Agar chahein toh main kuch affordable options bhi dikhati hoon same area mein.
+    next_action: collect_budget
+
+  not_interested:
+    trigger_keywords: [not interested, nahi chahiye, baad mein]
+    response: |
+      Koi baat nahi! Kya main aapko WhatsApp par property details bhej dun?
+      Jab bhi time mile, dekh lena.
+    next_action: collect_contact
+
+  need_time:
+    trigger_keywords: [sochna hai, time chahiye, discuss karna hai]
+    response: |
+      Bilkul, yeh bada decision hai.
+      Main ek brochure bhej deti hoon, aur 2-3 din baad follow up kar lungi.
+      Chalega?
+    next_action: collect_contact
+
+# EMI Calculator Integration
+integrations:
+  emi_calculator:
+    enabled: true
+    trigger: "emi|loan|finance|monthly"
+    action: calculate_emi
+    parameters:
+      default_rate: 8.5
+      default_tenure: 20
+
+  crm_sync:
+    enabled: true
+    sync_fields: [customer_name, phone_number, budget, preferred_location, property_type]
+    lead_status: new_lead

@@ -1,0 +1,241 @@
+# Instant FAQ Playbook - Bypass LLM for Common Questions
+# Purpose: Sub-100ms responses for frequently asked questions
+# Priority: HIGH - Match these BEFORE sending to LLM
+#
+# Every entry below is bilingual (triggers_en/triggers_hi + response_en/
+# response_hi): which trigger phrase matched decides which language the
+# response comes back in, instead of one hardcoded response regardless of
+# what language the caller actually used.
+
+id: instant_faq
+name: Instant FAQ Responses
+description: Zero-latency responses for common Maya questions
+version: "1.0"
+author: Maya AI Team
+tags: [faq, instant, fast_path, bypass_llm]
+
+priority: 100
+response_mode: direct
+
+faq_entries:
+
+  # Identity & Introduction
+  who_is_maya:
+    triggers_en:
+      - "who are you"
+      - "what is your name"
+      - "introduce yourself"
+      - "your name"
+    triggers_hi:
+      - "aap kaun ho"
+      - "kon ho tum"
+    response_en: "I'm Maya, your AI assistant. How can I help you today?"
+    response_hi: "Main Maya hoon, aapki AI assistant! Aapki kya help kar sakti hoon?"
+    confidence: 0.95
+    audio_key: "maya_intro/intro_indian"
+
+  what_is_this_service:
+    triggers_en:
+      - "what is this service"
+      - "what do you do"
+      - "tell me about this"
+      - "what does this do"
+    triggers_hi:
+      - "yeh kya hai"
+    response_en: "This is an AI-powered voice assistant platform that helps businesses automate sales and support conversations across multiple languages."
+    response_hi: "Yeh ek AI-powered voice assistant platform hai jo businesses ko kai languages mein sales aur support conversations automate karne mein madad karta hai."
+    confidence: 0.95
+
+  # Pricing & Plans
+  pricing:
+    triggers_en:
+      - "price"
+      - "cost"
+      - "how much"
+      - "pricing"
+      - "rate"
+    triggers_hi:
+      - "kitna paisa"
+      - "kitne ka hai"
+    response_en: "Pricing is flexible — plans for small businesses start around ₹5,000 per month. Would you like detailed pricing, or should I set up a demo?"
+    response_hi: "Pricing flexible hai — chhoti businesses ke liye plans lagbhag ₹5,000 per month se shuru hote hain. Aapko detailed pricing chahiye, ya demo set up karein?"
+    confidence: 0.90
+
+  free_trial:
+    triggers_en:
+      - "free trial"
+      - "try for free"
+      - "demo"
+      - "test"
+    triggers_hi:
+      - "muft"
+      - "free mein"
+    response_en: "Yes, there's a 14-day free trial with full features — no credit card required. Would you like to start it?"
+    response_hi: "Haan, 14 din ka free trial milta hai, poore features ke saath — credit card ki zaroorat nahi hai. Kya aap trial shuru karna chahenge?"
+    confidence: 0.95
+
+  # Languages
+  languages:
+    triggers_en:
+      - "languages"
+      - "hindi"
+      - "regional"
+      - "multilingual"
+    triggers_hi:
+      - "kitni bhasha"
+      - "konsi language"
+    response_en: "It supports multiple Indian languages, including Hindi, Tamil, Telugu, Kannada, Bengali, and Gujarati — and it can handle code-switching between them."
+    response_hi: "Yeh kai Indian languages support karta hai — Hindi, Tamil, Telugu, Kannada, Bengali, aur Gujarati shaamil hain — aur languages ke beech code-switching bhi handle kar sakta hai."
+    confidence: 0.95
+
+  # Features
+  voice_ai:
+    triggers_en:
+      - "voice ai"
+      - "call"
+      - "phone"
+      - "calling"
+      - "voice bot"
+    triggers_hi: []
+    response_en: "The voice AI handles natural conversations over both incoming and outgoing calls, picks up on caller emotion, and can transfer to a human agent when needed."
+    response_hi: "Voice AI incoming aur outgoing dono calls par natural conversations handle karta hai, caller ki emotion samajhta hai, aur zaroorat padne par human agent ko transfer kar sakta hai."
+    confidence: 0.90
+
+  whatsapp:
+    triggers_en:
+      - "whatsapp"
+      - "whats app"
+    triggers_hi: []
+    response_en: "Yes, there's WhatsApp Business integration — it handles messages, sends automatic replies, and can even send voice notes."
+    response_hi: "Haan, WhatsApp Business integration available hai — yeh messages handle karta hai, automatic replies bhejta hai, aur voice notes bhi bhej sakta hai."
+    confidence: 0.95
+
+  crm_integration:
+    triggers_en:
+      - "crm"
+      - "salesforce"
+      - "hubspot"
+      - "zoho"
+      - "integration"
+    triggers_hi: []
+    response_en: "There's native integration with Salesforce, HubSpot, and Zoho — calls and transcripts sync automatically."
+    response_hi: "Salesforce, HubSpot, aur Zoho ke saath native integration hai — calls aur transcripts automatically sync ho jaate hain."
+    confidence: 0.90
+
+  # Security & Compliance
+  security:
+    triggers_en:
+      - "secure"
+      - "security"
+      - "safe"
+      - "data protection"
+      - "privacy"
+    triggers_hi: []
+    response_en: "Security is a priority — end-to-end encryption, SOC 2 and GDPR compliant, and aligned with Indian IT Act requirements. Your data stays protected."
+    response_hi: "Security ka poora dhyaan rakha jaata hai — end-to-end encryption, SOC 2 aur GDPR compliant, aur Indian IT Act ke mutabik. Aapka data surakshit rehta hai."
+    confidence: 0.95
+
+  # Support
+  support:
+    triggers_en:
+      - "support"
+      - "help"
+      - "customer service"
+      - "contact"
+    triggers_hi: []
+    response_en: "There's 24/7 technical support over chat and email, plus dedicated account managers for enterprise clients. Is there something specific I can help with?"
+    response_hi: "24/7 technical support chat aur email par available hai, aur enterprise clients ke liye dedicated account managers bhi hote hain. Kya kisi specific cheez mein madad chahiye?"
+    confidence: 0.90
+
+  # Company Info
+  location:
+    triggers_en:
+      - "where are you"
+      - "location"
+      - "where are you based"
+    triggers_hi:
+      - "kahan ho"
+      - "kahan based ho"
+    response_en: "I'm cloud-based, so I'm available from anywhere. Would you like to set up a demo?"
+    response_hi: "Main cloud-based hoon, isliye kahin se bhi available hoon. Kya aap demo set up karna chahenge?"
+    confidence: 0.95
+
+  # Implementation
+  implementation:
+    triggers_en:
+      - "setup"
+      - "implementation"
+      - "how long"
+      - "start"
+    triggers_hi:
+      - "kitna time"
+    response_en: "Setup typically takes one to two weeks. Simpler cases can even be ready in three to five days. Should I schedule a demo?"
+    response_hi: "Setup mein aam taur par ek se do hafte lagte hain. Simple cases teen se paanch din mein bhi ready ho sakte hain. Kya main demo schedule karun?"
+    confidence: 0.90
+
+  # Comparison
+  competitors:
+    triggers_en:
+      - "vs"
+      - "compare"
+      - "better than"
+      - "difference"
+      - "competitor"
+    triggers_hi: []
+    response_en: "What sets this apart is the focus on Indian languages, support for regional accents, and a design built specifically for Indian businesses. I can walk you through a detailed comparison in a demo."
+    response_hi: "Ismein khaas baat yeh hai ki Indian languages par focus hai, regional accents support hote hain, aur yeh khaas Indian businesses ke liye banaya gaya hai. Demo mein main aapko detailed comparison dikha sakti hoon."
+    confidence: 0.85
+
+  # Results
+  roi:
+    triggers_en:
+      - "results"
+      - "roi"
+      - "conversion"
+      - "performance"
+      - "success"
+    triggers_hi: []
+    response_en: "Clients typically see a 30 to 50 percent improvement in conversions, thanks to faster response times, consistent follow-up, and 24/7 availability. I can share some case studies if you'd like."
+    response_hi: "Clients aam taur par 30 se 50 percent tak conversion improvement dekhte hain — faster response, consistent follow-up, aur 24/7 availability ki wajah se. Chahen to main kuch case studies share kar sakti hoon."
+    confidence: 0.90
+
+  # Greetings (backup — quick_greetings.yaml usually matches these first)
+  greeting:
+    triggers_en:
+      - "hello"
+      - "hi"
+      - "hey"
+      - "good morning"
+      - "good afternoon"
+      - "good evening"
+    triggers_hi:
+      - "namaste"
+    response_en: "Hello! I'm Maya. How can I help you today?"
+    response_hi: "Namaste! Main Maya hoon. Aapki kaise help kar sakti hoon aaj?"
+    confidence: 0.95
+
+  # Goodbye
+  goodbye:
+    triggers_en:
+      - "bye"
+      - "goodbye"
+      - "thank you"
+      - "thanks"
+    triggers_hi:
+      - "dhanyavaad"
+      - "shukriya"
+    response_en: "Thank you! Have a great day. Feel free to reach out if you have any questions."
+    response_hi: "Dhanyavaad! Aapka din shubh ho. Koi bhi sawal ho toh zaroor poochiye!"
+    confidence: 0.95
+    audio_key: "closings/thank_you_1"
+
+# Fallback - if no FAQ matches, route to LLM
+fallback:
+  action: route_to_llm
+  message: "Let me think about that..."
+
+# Analytics tracking
+analytics:
+  track_matches: true
+  track_fallbacks: true
+  log_confidence_scores: true

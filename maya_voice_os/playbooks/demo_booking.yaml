@@ -1,0 +1,125 @@
+# Demo Booking Playbook
+# Purpose: Quick path to scheduling demos
+# Response Time: <100ms per step
+
+id: demo_booking
+name: Demo Booking Flow
+description: Streamlined demo scheduling without LLM
+version: "1.0"
+author: Maya AI Team
+priority: 95
+tags: [demo, booking, lead, conversion]
+
+start_action: detect_intent
+
+actions:
+  detect_intent:
+    type: branch
+    triggers:
+      - "demo"
+      - "trial"
+      - "try"
+      - "test"
+      - "dekhna hai"
+      - "show me"
+      - "book"
+    response: "Great! Demo schedule karte hain. Aapka naam kya hai?"
+    next_action: collect_name
+
+  collect_name:
+    type: ask
+    parameters:
+      variable: customer_name
+    response: "Perfect! Aur company ka naam?"
+    next_action: collect_company
+
+  collect_company:
+    type: ask
+    parameters:
+      variable: company_name
+    response: "Accha {{company_name}}! Kaunsi industry mein hain aap?"
+    next_action: collect_industry
+
+  collect_industry:
+    type: ask
+    parameters:
+      variable: industry
+      options: [real_estate, healthcare, ecommerce, financial, education, other]
+    response: "Demo ke liye phone number dijiye."
+    next_action: collect_phone
+
+  collect_phone:
+    type: ask
+    parameters:
+      variable: phone
+      validation: phone
+    response: "Email bhi de dijiye for calendar invite."
+    next_action: collect_email
+
+  collect_email:
+    type: ask
+    parameters:
+      variable: email
+      validation: email
+    response: "Kab suit karega - aaj, kal, ya is week?"
+    next_action: collect_timing
+
+  collect_timing:
+    type: ask
+    parameters:
+      variable: preferred_time
+      options: [today, tomorrow, this_week, next_week]
+    response: "Morning prefer karoge ya afternoon?"
+    next_action: collect_slot
+
+  collect_slot:
+    type: ask
+    parameters:
+      variable: time_slot
+      options: [morning, afternoon, evening]
+    next_action: confirm_booking
+
+  confirm_booking:
+    type: respond
+    content: |
+      Perfect {{customer_name}}!
+      
+      Demo confirmed:
+      📅 {{preferred_time}} - {{time_slot}}
+      📧 Calendar invite: {{email}}
+      📱 Reminder: {{phone}}
+      
+      Humare team {{company_name}} ke liye {{industry}}-specific demo prepare karenge.
+      
+      Koi sawal ho toh zaroor poochiye!
+    next_action: ask_questions
+
+  ask_questions:
+    type: ask
+    content: "Kya demo se pehle koi specific cheez jaanna hai?"
+    branches:
+      yes: handle_question
+      no: end_flow
+    next_action: end_flow
+
+  handle_question:
+    type: route_to_llm
+    context: "User has booked demo and has a question"
+    
+  end_flow:
+    type: end
+    content: "Dhanyavaad! Demo mein milte hain. 👋"
+
+# CRM Integration
+integrations:
+  crm_sync:
+    enabled: true
+    create_lead: true
+    lead_source: "AI_Demo_Booking"
+    sync_fields:
+      - customer_name
+      - company_name
+      - industry
+      - phone
+      - email
+      - preferred_time
