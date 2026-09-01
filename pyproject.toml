@@ -54,7 +54,6 @@ packages = [
     "maya_voice_os.telephony_service",
     "maya_voice_os.telephony_service.adapters",
     "maya_voice_os.shared",
-    "env.sample",
 ]
 
 # Non-code assets that must ship inside the installed package — without
@@ -65,4 +64,5 @@ packages = [
     "playbooks/*.yaml",
     "identity/*.yaml",
     "orchestration_service/ui/*.html",
+    "env.sample",
 ]
