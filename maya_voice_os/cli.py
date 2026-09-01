@@ -248,23 +248,58 @@ def _run_latency_suite(calls: int = 30, concurrency: int = 3, threshold_ms: floa
         print(f"Calls exceeding {threshold_ms:.0f}ms threshold: {over_threshold}/{len(total_samples)}")
 
 
+def _ensure_env_file() -> bool:
+    """
+    Creates .env from the sample bundled inside the installed package if one
+    doesn't exist yet in the current directory. Returns True if a real .env
+    is already there and it's safe to proceed, False if one was just
+    created and the caller should stop here.
+    """
+    cwd_env = Path.cwd() / ".env"
+    if cwd_env.exists():
+        return True
+
+    bundled_sample = Path(__file__).resolve().parent / "env.sample"
+    if not bundled_sample.exists():
+        cwd_env.write_text("")
+    else:
+        cwd_env.write_text(bundled_sample.read_text())
+
+    print(f"Created {cwd_env} — add an API key (Groq or OpenRouter, both free), then run this again.")
+    return False
+
+
 def _run_local() -> None:
+    if not _ensure_env_file():
+        return
     from maya_voice_os.run_local import main
     asyncio.run(main())
 
 
 def _run_orchestrator() -> None:
+    if not _ensure_env_file():
+        return
     import os
     import uvicorn
     from maya_voice_os.orchestration_service.server import app
-    uvicorn.run(
-        app,
-        host=os.getenv("ORCHESTRATION_HOST", "0.0.0.0"),
-        port=int(os.getenv("ORCHESTRATION_PORT", "8004")),
-    )
+
+    host = os.getenv("ORCHESTRATION_HOST", "0.0.0.0")
+    port = int(os.getenv("ORCHESTRATION_PORT", "8004"))
+    display_host = "localhost" if host == "0.0.0.0" else host
+
+    print()
+    print("=" * 60)
+    print("Maya Voice OS is starting. Once ready, open this in a browser:")
+    print(f"    http://{display_host}:{port}")
+    print("=" * 60)
+    print()
+
+    uvicorn.run(app, host=host, port=port)
 
 
 def _run_telephony(barge_in_demo: bool = False, safe_mode: bool = False) -> None:
+    if not _ensure_env_file():
+        return
     import os
     import uvicorn
     from maya_voice_os.telephony_service.server import app
@@ -272,11 +307,14 @@ def _run_telephony(barge_in_demo: bool = False, safe_mode: bool = False) -> None
         os.environ["BARGE_IN_DEMO_MODE"] = "true"
     if safe_mode:
         os.environ["SAFE_MODE"] = "true"
-    uvicorn.run(
-        app,
-        host=os.getenv("TELEPHONY_HOST", "0.0.0.0"),
-        port=int(os.getenv("TELEPHONY_PORT", "8100")),
-    )
+
+    host = os.getenv("TELEPHONY_HOST", "0.0.0.0")
+    port = int(os.getenv("TELEPHONY_PORT", "8100"))
+    print()
+    print(f"Telephony service starting on http://{'localhost' if host == '0.0.0.0' else host}:{port}")
+    print()
+
+    uvicorn.run(app, host=host, port=port)
 
 
 def _parse_eval_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
